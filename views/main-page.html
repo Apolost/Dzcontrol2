@@ -1,0 +1,79 @@
+<div id="view-main-page">
+    <div class="page-header-container">
+        <h1 class="page-header" style="margin-bottom: 0;">Hlavní stránka</h1>
+        <div>
+            <button class="btn btn-secondary" data-action="open-spizy-modal"><i data-feather="grid"></i>Špízy</button>
+            <button class="btn btn-secondary" data-action="open-rizky-modal"><i data-feather="trending-up"></i>Řízky</button>
+            <button class="btn btn-secondary" data-action="open-maykawa-modal"><i data-feather="tool"></i>Maykawa</button>
+            <button class="btn btn-primary" data-action="add-main-order"><i data-feather="plus"></i>Přidat objednávku</button>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h2 class="card-title">Upozornění na chybějící suroviny</h2></div>
+        <div class="card-content" id="main-page-alerts"></div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h2 class="card-title">Rychlé zadání</h2></div>
+        <div class="card-content">
+            <div id="main-page-quick-entry"></div>
+            <div id="main-page-kfc-quick-entry"></div>
+            <div id="main-page-spizy-quick-entry"></div>
+        </div>
+    </div>
+     <div class="card accordion" id="main-page-spizy-container">
+        <details>
+            <summary>
+                <h2 class="card-title">Špízy</h2>
+                <i data-feather="chevron-right" class="arrow-icon"></i>
+            </summary>
+            <div class="details-content" style="padding: 20px 0 0 0;">
+                <div id="main-page-spizy"></div>
+            </div>
+        </details>
+    </div>
+    <div class="card accordion" id="main-page-rizky-container">
+        <details>
+            <summary>
+                <h2 class="card-title">Řízky</h2>
+                <i data-feather="chevron-right" class="arrow-icon"></i>
+            </summary>
+            <div class="details-content" style="padding: 20px 0 0 0;">
+                 <div id="main-page-rizky"></div>
+            </div>
+        </details>
+    </div>
+    <div class="card accordion" id="main-page-steak-container">
+        <details>
+            <summary>
+                <h2 class="card-title">Steak</h2>
+                <i data-feather="chevron-right" class="arrow-icon"></i>
+            </summary>
+            <div class="details-content" style="padding: 20px 0 0 0;">
+                 <div id="main-page-steak"></div>
+            </div>
+        </details>
+    </div>
+    <div class="card accordion" id="main-page-horni-spodni-container">
+        <details>
+            <summary>
+                <h2 class="card-title">Horní / Spodní</h2>
+                <i data-feather="chevron-right" class="arrow-icon"></i>
+            </summary>
+            <div class="details-content" style="padding: 20px 0 0 0;">
+                 <div id="main-page-horni-stehna"></div>
+                 <div id="main-page-spodni-stehna" style="margin-top: 20px;"></div>
+            </div>
+        </details>
+    </div>
+    <div class="card accordion" id="main-page-stehna-container">
+        <details>
+            <summary>
+                <h2 class="card-title">Stehna</h2>
+                <i data-feather="chevron-right" class="arrow-icon"></i>
+            </summary>
+            <div class="details-content" style="padding: 20px 0 0 0;">
+                 <div id="main-page-stehna"></div>
+            </div>
+        </details>
+    </div>
+</div>
