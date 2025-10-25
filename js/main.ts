@@ -8,8 +8,8 @@ import { appState } from './state.ts';
 import { DOMElements } from './ui.ts';
 import { bindGlobalEvents } from './eventHandler.ts';
 import { initEmployeesApp } from './components/employees.ts';
-import { getWeekNumber } from './utils.ts';
-import { calculateTimeline } from './components/productionOverview.ts';
+import { getWeekNumber, minutesToTimeString } from './utils.ts';
+import { calculateTimeline } from './services/calculations.ts';
 
 // View Renderers
 import { renderMainPage } from './components/mainPage.ts';
@@ -31,6 +31,8 @@ import { renderCustomers } from './settings/customers.ts';
 import { renderLineSettings } from './settings/lineSettings.ts';
 import { renderExportData } from './components/export.ts';
 import { renderMonthlyOverview } from './components/monthlyOverview.ts';
+import { renderStockBoxes, renderStockTrays } from './components/stock.ts';
+import { renderFrozenProductsPage } from './components/frozenProducts.ts';
 
 
 async function loadView(viewName) {
@@ -42,12 +44,6 @@ async function loadView(viewName) {
         console.error(error);
         return `<div class="card"><div class="card-content"><p class="shortage">Error: View '${viewName}' could not be loaded.</p></div></div>`;
     }
-}
-
-function minutesToTimeString(minutes) {
-    const h = Math.floor(minutes / 60) % 24;
-    const m = Math.round(minutes % 60);
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 }
 
 export function updateInfoBar() {
@@ -194,6 +190,7 @@ export async function render() {
         case 'box-weights': renderBoxWeights(); break;
         case 'create-mix': renderCreateMix(); break;
         case 'create-product': renderCreateProduct(); break;
+        case 'frozen-products': renderFrozenProductsPage(); break;
         case 'palette-weights': renderPaletteWeights(); break;
         case 'zmeny': renderChanges(); break;
         case 'employees': initEmployeesApp(); break;
@@ -202,6 +199,8 @@ export async function render() {
         case 'spizy-settings': renderSpizySettings(); break;
         case 'customers': renderCustomers(); break;
         case 'line-settings': renderLineSettings(); break;
+        case 'stock-boxes': renderStockBoxes(); break;
+        case 'stock-trays': renderStockTrays(); break;
     }
     
     feather.replace();

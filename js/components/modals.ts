@@ -713,6 +713,11 @@ export function openAddSurovinyModalFromStock() {
     openAddSurovinyModal();
 }
 
+export function openAddSurovinyModalFromProduction() {
+    DOMElements.surovinaSourceModal.classList.remove('active');
+    openAddSurovinyModal();
+}
+
 export function openYieldAdjustmentModal() {
     DOMElements.surovinaSourceModal.classList.remove('active');
     const modal = DOMElements.yieldAdjustmentModal;

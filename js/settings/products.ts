@@ -10,6 +10,7 @@ import { generateId } from '../utils.ts';
 export function renderCreateProduct() {
     const newProdCustomer = document.getElementById('new-prod-customer');
     const newProdSurovina = document.getElementById('new-prod-surovina');
+    const newProdBoxType = document.getElementById('new-prod-box-type');
     const newProdCalibratedSurovina = document.getElementById('new-prod-calibrated-surovina');
     const newProdCalibratedWeight = document.getElementById('new-prod-calibrated-weight');
     const saveCaliberBtn = document.getElementById('save-caliber-btn');
@@ -20,6 +21,9 @@ export function renderCreateProduct() {
     const surovinaOptions = appState.suroviny.filter(s => !s.isMix && !s.isProduct).map(s => `<option value="${s.id}">${s.name}</option>`).join('');
     newProdSurovina.innerHTML = surovinaOptions;
     newProdCalibratedSurovina.innerHTML = '<option value="">-- Vyberte --</option>' + surovinaOptions;
+
+    const boxTypeOptions = appState.boxTypes.map(bt => `<option value="${bt.id}">${bt.name}</option>`).join('');
+    newProdBoxType.innerHTML = boxTypeOptions;
     
     const toggleSaveCaliberBtn = () => {
         saveCaliberBtn.disabled = !(newProdCalibratedSurovina.value && newProdCalibratedWeight.value.trim());
@@ -33,6 +37,8 @@ export function renderCreateProduct() {
 function renderExistingProducts() {
     const tbody = document.getElementById('existing-products-table-body');
     tbody.innerHTML = '';
+    const boxTypeMap = new Map(appState.boxTypes.map(bt => [bt.id, bt.name]));
+
     appState.products.forEach(product => {
         const customer = appState.zakaznici.find(c => c.id === product.customerId);
         const surovina = appState.suroviny.find(s => s.id === product.surovinaId);
@@ -41,12 +47,13 @@ function renderExistingProducts() {
             tr.classList.add('product-inactive');
         }
         const activeIcon = product.isActive ? ICONS.eye : ICONS.eyeOff;
+        const boxTypeName = boxTypeMap.get(product.boxTypeId) || 'Nenastaveno';
 
         tr.innerHTML = `
             <td>${product.name}</td>
             <td>${customer?.name || 'N/A'}</td>
             <td>${surovina?.name || 'N/A'}</td>
-            <td>${product.boxWeight}</td>
+            <td>${boxTypeName}</td>
             <td><button class="btn-icon" data-action="toggle-product-active" data-id="${product.id}">${activeIcon}</button></td>
             <td class="actions">
                 <button class="btn-icon" data-action="edit-product" data-id="${product.id}">${ICONS.edit}</button>
@@ -67,7 +74,7 @@ export function openProductEditor(productId) {
     document.getElementById('new-prod-customer').value = product.customerId;
     document.getElementById('new-prod-surovina').value = product.surovinaId;
     document.getElementById('new-prod-box-weight').value = product.boxWeight;
-    document.getElementById('new-prod-packaging-type').value = product.packagingType || 'VL';
+    document.getElementById('new-prod-box-type').value = product.boxTypeId || '';
     document.getElementById('new-prod-quick-entry').checked = product.showInQuickEntry || false;
     document.getElementById('new-prod-is-other').checked = product.isOther || false;
     document.getElementById('new-prod-marinade-name').value = product.marinadeName;
@@ -86,7 +93,7 @@ export function cancelEditProd() {
     document.getElementById('create-product-header').textContent = 'Vytvořit nový produkt';
     document.getElementById('new-prod-name').value = '';
     document.getElementById('new-prod-box-weight').value = '';
-    document.getElementById('new-prod-packaging-type').value = 'OA';
+    document.getElementById('new-prod-box-type').value = appState.boxTypes[0]?.id || '';
     document.getElementById('new-prod-quick-entry').checked = false;
     document.getElementById('new-prod-is-other').checked = false;
     document.getElementById('new-prod-marinade-name').value = '';
@@ -98,12 +105,12 @@ export function cancelEditProd() {
 }
 
 export function saveNewProd() {
-    const { newProdName, newProdCustomer, newProdSurovina, newProdBoxWeight, newProdPackagingType, newProdQuickEntry, newProdIsOther, newProdMarinadeName, newProdMarinadePercent, newProdLossPercent, newProdCalibratedSurovina, newProdCalibratedWeight } = {
+    const { newProdName, newProdCustomer, newProdSurovina, newProdBoxWeight, newProdBoxType, newProdQuickEntry, newProdIsOther, newProdMarinadeName, newProdMarinadePercent, newProdLossPercent, newProdCalibratedSurovina, newProdCalibratedWeight } = {
         newProdName: document.getElementById('new-prod-name'),
         newProdCustomer: document.getElementById('new-prod-customer'),
         newProdSurovina: document.getElementById('new-prod-surovina'),
         newProdBoxWeight: document.getElementById('new-prod-box-weight'),
-        newProdPackagingType: document.getElementById('new-prod-packaging-type'),
+        newProdBoxType: document.getElementById('new-prod-box-type'),
         newProdQuickEntry: document.getElementById('new-prod-quick-entry'),
         newProdIsOther: document.getElementById('new-prod-is-other'),
         newProdMarinadeName: document.getElementById('new-prod-marinade-name'),
@@ -124,7 +131,7 @@ export function saveNewProd() {
         customerId: newProdCustomer.value,
         surovinaId: newProdSurovina.value,
         boxWeight: parseFloat(newProdBoxWeight.value) || 0,
-        packagingType: newProdPackagingType.value,
+        boxTypeId: newProdBoxType.value,
         showInQuickEntry: newProdQuickEntry.checked,
         isOther: newProdIsOther.checked,
         marinadeName: newProdMarinadeName.value.trim(),

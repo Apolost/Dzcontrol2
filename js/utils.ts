@@ -18,3 +18,9 @@ export function getDateOfWeek(w, y) {
     const d = (1 + (w - 1) * 7); // 1st day of the week
     return new Date(y, 0, d);
 }
+
+export function minutesToTimeString(minutes) {
+    const h = Math.floor(minutes / 60) % 24;
+    const m = Math.round(minutes % 60);
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}

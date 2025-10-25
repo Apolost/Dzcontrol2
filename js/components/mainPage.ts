@@ -5,9 +5,8 @@
 // @ts-nocheck
 import { appState, saveState } from '../state.ts';
 import { ICONS, showToast, DOMElements, playNotificationSound } from '../ui.ts';
-import { getDailyNeeds, getMaykawaThighsNeeded, getKfcSurovinyNeeds, getSpizyNeeds, calculateYieldData } from '../services/calculations.ts';
+import { getDailyNeeds, getMaykawaThighsNeeded, getKfcSurovinyNeeds, getSpizyNeeds, calculateYieldData, calculateTimeline } from '../services/calculations.ts';
 import { render } from '../main.ts';
-import { calculateTimeline } from './productionOverview.ts';
 import { generateId } from '../utils.ts';
 
 let lastCalibrationAlertCount = 0;
@@ -397,6 +396,48 @@ export function renderMainPage() {
             alertsContainer.innerHTML += `<p class="shortage" style="display: flex; align-items: center; gap: 8px;">${icon} Špízy: Chybí ${(needed - stock).toFixed(2)} kg ${ing.name}</p>`;
         }
     });
+
+    // Price change alerts
+    const activePriceChanges = appState.priceChanges.filter(change => 
+        change.validFrom <= date && !appState.dismissedPriceChangeAlerts.includes(change.id)
+    );
+
+    if (activePriceChanges.length > 0) {
+        let priceChangeAlertsHtml = '';
+        activePriceChanges.forEach(change => {
+            const hasOrder = appState.orders.some(o => 
+                o.date === date && 
+                o.customerId === change.customerId && 
+                o.items.some(i => i.surovinaId === change.surovinaId)
+            );
+            const hasAction = appState.plannedActions.some(a => 
+                a.customerId === change.customerId && 
+                a.surovinaId === change.surovinaId && 
+                date >= a.startDate && 
+                (!a.endDate || date <= a.endDate) &&
+                (a.dailyCounts?.[date]?.boxCount || 0) > 0
+            );
+
+            if (hasOrder || hasAction) {
+                const customer = appState.zakaznici.find(c => c.id === change.customerId);
+                const surovina = appState.suroviny.find(s => s.id === change.surovinaId);
+                const formattedDate = new Date(change.validFrom).toLocaleDateString('cs-CZ');
+                
+                if (customer && surovina) {
+                    hasAlerts = true;
+                    priceChangeAlertsHtml += `
+                        <div class="shortage" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; background-color: color-mix(in srgb, var(--accent-danger) 15%, transparent); border-color: var(--accent-danger);">
+                            <span style="display: flex; align-items: center; gap: 8px;"><i data-feather="dollar-sign" style="color: var(--accent-danger);"></i> Upozornění: Změna ceny pro ${customer.name} - ${surovina.name} od ${formattedDate}</span>
+                            <button class="btn btn-secondary" data-action="dismiss-price-change-alert" data-id="${change.id}" style="padding: 4px 12px;">OK</button>
+                        </div>
+                    `;
+                }
+            }
+        });
+        if (priceChangeAlertsHtml) {
+            alertsContainer.innerHTML += priceChangeAlertsHtml;
+        }
+    }
 
 
     if (currentShortageCount > lastShortageCount) {
@@ -1029,19 +1070,17 @@ export function openTempWeightModal(target) {
 
     const date = appState.ui.selectedDate;
     const modal = DOMElements.tempWeightModal;
-    modal.dataset.surovinaId = surovinaId; // Store for later use
+    modal.dataset.surovinaId = surovinaId;
 
     const affectedItems = [];
     const surovinaNameUpper = surovina.name.toUpperCase();
     
-    // Find all direct and indirect dependencies for the shortage
     const relatedSurovinaIds = new Set([surovinaId]);
     appState.products.forEach(p => {
         if (p.surovinaId === surovinaId) {
             relatedSurovinaIds.add(p.id);
         }
     });
-    // Add implicit dependencies
     if (surovinaNameUpper === 'PRSA') {
         const rizky = appState.suroviny.find(s => s.name.toUpperCase() === 'ŘÍZKY');
         if (rizky) relatedSurovinaIds.add(rizky.id);
@@ -1051,17 +1090,19 @@ export function openTempWeightModal(target) {
         if (steak) relatedSurovinaIds.add(steak.id);
     }
     
-    let totalBoxes = 0;
+    let totalNeededKg = 0;
     appState.orders.filter(o => o.date === date).forEach(order => {
         order.items.forEach(item => {
             if (item.isActive && relatedSurovinaIds.has(item.surovinaId)) {
                 affectedItems.push({ ...item, orderId: order.id, customerId: order.customerId });
-                totalBoxes += item.boxCount;
+
+                const weights = appState.boxWeights[order.customerId]?.[item.surovinaId];
+                const originalWeight = (weights && item.type && weights[item.type]) ? weights[item.type] : (weights?.VL || 10000);
+                totalNeededKg += item.boxCount * (originalWeight / 1000);
             }
         });
     });
 
-    // Calculations for summary
     const calculationResults = calculateTimeline(date);
     const dailyData = appState.chickenCounts[date];
     const { yieldData } = calculateYieldData(date, dailyData?.flocks, calculationResults.totals.totalWeight);
@@ -1071,36 +1112,26 @@ export function openTempWeightModal(target) {
 
     if (surovinaNameUpper === 'ŘÍZKY') {
         const prsaSurovina = appState.suroviny.find(s => s.name.toUpperCase() === 'PRSA');
-        const rizkySurovina = surovina;
-        
         if (prsaSurovina) {
-            // 1. Calculate available Breasts
             const prsaStockKg = (prsaSurovina.stock || 0) * (prsaSurovina.paletteWeight || 0) + (appState.dailyStockAdjustments[date]?.[prsaSurovina.id] || 0) * (prsaSurovina.boxWeight || 25);
             const prsaYieldKg = yieldMap.get('PRSA')?.produced || 0;
             const totalPrsaAvailableKg = prsaStockKg + prsaYieldKg;
             
-            // 2. Subtract direct Breast needs
-            const dailyNeeds = getDailyNeeds(date);
-            const directPrsaNeededKg = dailyNeeds[prsaSurovina.id] || 0;
+            const directPrsaNeededKg = getDailyNeeds(date)[prsaSurovina.id] || 0;
             const surplusPrsaKg = totalPrsaAvailableKg - directPrsaNeededKg;
             
-            // 3. Convert surplus Breasts to potential Schnitzels and add Schnitzel stock
-            const potentialRizkyFromPrsaKg = Math.max(0, surplusPrsaKg) * 0.70; // 70% yield
-            const rizkyStockKg = (rizkySurovina.stock || 0) * (rizkySurovina.paletteWeight || 0) + (appState.dailyStockAdjustments[date]?.[rizkySurovina.id] || 0) * (rizkySurovina.boxWeight || 25);
+            const potentialRizkyFromPrsaKg = Math.max(0, surplusPrsaKg) * 0.70;
+            const rizkyStockKg = (surovina.stock || 0) * (surovina.paletteWeight || 0) + (appState.dailyStockAdjustments[date]?.[surovinaId] || 0) * (surovina.boxWeight || 25);
             
             availableKg = potentialRizkyFromPrsaKg + rizkyStockKg;
         } else {
-            // Fallback if Breast surovina doesn't exist
-            const stockKg = (surovina.stock || 0) * (surovina.paletteWeight || 0) + (appState.dailyStockAdjustments[date]?.[surovinaId] || 0) * (surovina.boxWeight || 25);
-            availableKg = stockKg;
+            availableKg = (surovina.stock || 0) * (surovina.paletteWeight || 0) + (appState.dailyStockAdjustments[date]?.[surovinaId] || 0) * (surovina.boxWeight || 25);
         }
     } else if (surovinaNameUpper === 'STEAK') {
-        const steakSurovina = surovina;
         const { bonePercent, skinPercent } = appState.maykawaConfig;
         const steakYieldPercent = (100 - (bonePercent || 0) - (skinPercent || 0)) / 100;
         
         if (steakYieldPercent > 0) {
-            // 1. Calculate available Thighs pool
             const thighSurovinaNames = ['STEHNA', 'HORNÍ STEHNA', 'SPODNÍ STEHNA', 'ČTVRTKY'];
             const thighSuroviny = appState.suroviny.filter(s => thighSurovinaNames.includes(s.name.toUpperCase()));
             let totalThighStockKg = 0;
@@ -1112,8 +1143,7 @@ export function openTempWeightModal(target) {
             const thighYieldInfo = yieldMap.get('STEHNA CELKEM');
             const totalThighsProducedKg = thighYieldInfo?.produced || 0;
             const totalThighsAvailableKg = totalThighStockKg + totalThighsProducedKg;
-
-            // 2. Subtract Thigh needs (excluding steak itself)
+            
             const totalThighsNeededKg = thighYieldInfo?.needed || 0;
             const { thighNeeds } = calculateYieldData(date, dailyData?.flocks, calculationResults.totals.totalWeight);
             const maykawaNeedsKg = thighNeeds['Na Steak (Maykawa)'] || 0;
@@ -1121,18 +1151,14 @@ export function openTempWeightModal(target) {
 
             const surplusThighsForSteakKg = totalThighsAvailableKg - otherThighNeedsKg;
             
-            // 3. Convert surplus Thighs to potential Steak and add Steak stock
             const potentialSteakFromThighsKg = Math.max(0, surplusThighsForSteakKg) * steakYieldPercent;
-            const steakStockKg = (steakSurovina.stock || 0) * (steakSurovina.paletteWeight || 0) + (appState.dailyStockAdjustments[date]?.[steakSurovina.id] || 0) * (steakSurovina.boxWeight || 25);
+            const steakStockKg = (surovina.stock || 0) * (surovina.paletteWeight || 0) + (appState.dailyStockAdjustments[date]?.[surovinaId] || 0) * (surovina.boxWeight || 25);
             
             availableKg = potentialSteakFromThighsKg + steakStockKg;
         } else {
-            // Fallback if yield is 0
-            const stockKg = (steakSurovina.stock || 0) * (steakSurovina.paletteWeight || 0) + (appState.dailyStockAdjustments[date]?.[steakSurovina.id] || 0) * (steakSurovina.boxWeight || 25);
-            availableKg = stockKg;
+            availableKg = (surovina.stock || 0) * (surovina.paletteWeight || 0) + (appState.dailyStockAdjustments[date]?.[surovinaId] || 0) * (surovina.boxWeight || 25);
         }
     } else {
-        // Original generic logic for other suroviny
         const boxes = appState.dailyStockAdjustments[date]?.[surovinaId] || 0;
         const stockKg = (surovina.stock || 0) * (surovina.paletteWeight || 0) + boxes * (surovina.boxWeight || 25);
         
@@ -1148,22 +1174,18 @@ export function openTempWeightModal(target) {
         availableKg = stockKg + yieldKg;
     }
     
-    const neededKg = getDailyNeeds(date)[surovinaId] || 0; 
-    const shortageKg = Math.max(0, neededKg - availableKg);
-    const suggestedWeightKg = totalBoxes > 0 ? availableKg / totalBoxes : 0;
+    const shortageKg = Math.max(0, totalNeededKg - availableKg);
+    const reductionFactor = (totalNeededKg > 0 && availableKg < totalNeededKg) ? availableKg / totalNeededKg : 1;
 
-    // Render Summary
     const summaryContainer = modal.querySelector('#temp-weight-summary');
     summaryContainer.innerHTML = `
-        <p><strong>Potřeba celkem:</strong> ${neededKg.toFixed(2)} kg</p>
+        <p><strong>Potřeba celkem:</strong> ${totalNeededKg.toFixed(2)} kg</p>
         <p><strong>Dostupné (sklad + výroba):</strong> ${availableKg.toFixed(2)} kg</p>
         <p class="shortage"><strong>Chybí: ${shortageKg.toFixed(2)} kg</strong></p>
         <hr style="margin: 10px 0;">
-        <p class="surplus"><strong>Navrhovaná rovnoměrná váha na bednu: ${suggestedWeightKg.toFixed(3)} kg</strong></p>
+        <p class="surplus"><strong>Navrhuje se rovnoměrné pokrácení o ${((1 - reductionFactor) * 100).toFixed(1)} %</strong></p>
     `;
-    modal.dataset.suggestedWeightGrams = (suggestedWeightKg * 1000).toFixed(0);
 
-    // Render Table
     const tableContainer = modal.querySelector('#temp-weight-items-container');
     let tableHTML = `<table class="data-table"><thead><tr><th>Zákazník</th><th>Produkt</th><th>Typ</th><th>Pův. váha (g)</th><th>Nová váha (g)</th></tr></thead><tbody>`;
 
@@ -1176,6 +1198,7 @@ export function openTempWeightModal(target) {
 
         const weights = appState.boxWeights[item.customerId]?.[item.surovinaId];
         const originalWeight = (weights && item.type && weights[item.type]) ? weights[item.type] : (weights?.VL || 10000);
+        const suggestedWeightForRow = Math.floor(originalWeight * reductionFactor);
 
         tableHTML += `
             <tr data-customer-id="${item.customerId}" data-surovina-id="${item.surovinaId}" data-type="${item.type}">
@@ -1183,7 +1206,7 @@ export function openTempWeightModal(target) {
                 <td>${itemSurovina?.name || '?'}</td>
                 <td>${item.type}</td>
                 <td>${originalWeight}</td>
-                <td><input type="number" class="temp-weight-input" value="${tempWeight !== undefined ? tempWeight : ''}" placeholder="${originalWeight}"></td>
+                <td><input type="number" class="temp-weight-input" value="${tempWeight !== undefined ? tempWeight : ''}" placeholder="${originalWeight}" max="${originalWeight}" data-suggested-weight="${suggestedWeightForRow}"></td>
             </tr>
         `;
     });
@@ -1197,12 +1220,19 @@ export function openTempWeightModal(target) {
 
 export function applySuggestedWeight(target) {
     const modal = target.closest('.modal');
-    const suggestedWeightGrams = modal.dataset.suggestedWeightGrams;
-    if (suggestedWeightGrams) {
-        modal.querySelectorAll('.temp-weight-input').forEach(input => {
-            input.value = suggestedWeightGrams;
-        });
+    let appliedCount = 0;
+    modal.querySelectorAll('.temp-weight-input').forEach(input => {
+        const suggestedWeight = input.dataset.suggestedWeight;
+        if (suggestedWeight) {
+            input.value = suggestedWeight;
+            appliedCount++;
+        }
+    });
+
+    if (appliedCount > 0) {
         showToast('Navrhovaná váha byla aplikována.');
+    } else {
+        showToast('Nebylo co aplikovat.', 'error');
     }
 }
 
@@ -1564,5 +1594,13 @@ export function markPreProductionDone(target) {
         saveState();
         renderMainPage();
         showToast('Předvýroba označena jako hotová a suroviny odečteny.', 'success');
+    }
+}
+
+export function dismissPriceChangeAlert(changeId) {
+    if (!appState.dismissedPriceChangeAlerts.includes(changeId)) {
+        appState.dismissedPriceChangeAlerts.push(changeId);
+        saveState();
+        renderMainPage();
     }
 }

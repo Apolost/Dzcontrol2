@@ -8,6 +8,12 @@ import { ICONS, showConfirmation, showToast } from '../ui.ts';
 import { generateId } from '../utils.ts';
 
 export function renderCreateMix() {
+    const customerSelect = document.getElementById('new-mix-customer');
+    const boxTypeSelect = document.getElementById('new-mix-box-type');
+
+    customerSelect.innerHTML = appState.zakaznici.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    boxTypeSelect.innerHTML = appState.boxTypes.map(bt => `<option value="${bt.id}">${bt.name}</option>`).join('');
+    
     cancelEditMix();
     renderExistingMixes();
 }
@@ -20,6 +26,8 @@ export function openMixEditor(mixId) {
     appState.ui.editingMixId = mixId;
     document.getElementById('create-mix-header').textContent = `Upravit mix: ${mix.name}`;
     document.getElementById('new-product-name').value = mix.name;
+    document.getElementById('new-mix-customer').value = mix.customerId || '';
+    document.getElementById('new-mix-box-type').value = mix.boxTypeId || '';
     document.getElementById('save-new-product-btn').textContent = 'Uložit změny';
     document.getElementById('cancel-edit-mix-btn').style.display = 'inline-block';
     
@@ -31,6 +39,8 @@ export function cancelEditMix() {
     appState.ui.editingMixId = null;
     document.getElementById('create-mix-header').textContent = 'Vytvořit nový mix';
     document.getElementById('new-product-name').value = '';
+    document.getElementById('new-mix-customer').value = appState.zakaznici[0]?.id || '';
+    document.getElementById('new-mix-box-type').value = appState.boxTypes[0]?.id || '';
     document.getElementById('save-new-product-btn').textContent = 'Uložit mix';
     document.getElementById('cancel-edit-mix-btn').style.display = 'none';
     renderNewProductComponents();
@@ -51,13 +61,9 @@ export function renderNewProductComponents(addComponent = false, components = []
                 <label>Surovina</label>
                 <select class="new-product-component-surovina">${rawMaterials.map(s => `<option value="${s.id}" ${component.surovinaId === s.id ? 'selected' : ''}>${s.name}</option>`).join('')}</select>
             </div>
-            <div class="form-field">
+            <div class="form-field" style="flex: 1;">
                 <label>Podíl (%)</label>
                 <input type="number" class="new-product-component-percentage" value="${component.percentage || 0}" min="0" max="100" step="0.1">
-            </div>
-            <div class="form-field">
-                <label>Ztráta (%)</label>
-                <input type="number" class="new-product-component-loss" value="${component.loss || 0}" min="0" max="100" step="0.1">
             </div>
             <button class="btn-icon danger" data-action="delete-new-product-component">${ICONS.trash}</button>
         `;
@@ -74,7 +80,7 @@ export function renderNewProductComponents(addComponent = false, components = []
         }
     }
     
-    container.querySelectorAll('.new-product-component-percentage, .new-product-component-loss').forEach(input => {
+    container.querySelectorAll('.new-product-component-percentage').forEach(input => {
         input.addEventListener('input', updateNewProductTotalPercentage);
     });
     updateNewProductTotalPercentage();
@@ -109,9 +115,12 @@ function renderExistingMixes() {
             return `${surovina?.name || '?'} (${c.percentage}%)`;
         }).join(', ');
 
+        const customer = appState.zakaznici.find(c => c.id === mix.customerId);
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${mix.name}</td>
+            <td>${customer?.name || 'N/A'}</td>
             <td>${componentsString}</td>
             <td class="actions">
                 <button class="btn-icon" data-action="edit-mix" data-id="${mix.id}">${ICONS.edit}</button>
@@ -124,6 +133,9 @@ function renderExistingMixes() {
 
 export function saveNewProduct() {
     const name = document.getElementById('new-product-name').value.trim().toUpperCase();
+    const customerId = document.getElementById('new-mix-customer').value;
+    const boxTypeId = document.getElementById('new-mix-box-type').value;
+
     if (!name) { showToast('Zadejte název mixu.', 'error'); return; }
 
     const isEditing = !!appState.ui.editingMixId;
@@ -136,11 +148,9 @@ export function saveNewProduct() {
     document.querySelectorAll('#new-product-components .form-row').forEach(row => {
         const select = row.querySelector('.new-product-component-surovina');
         const percentageInput = row.querySelector('.new-product-component-percentage');
-        const lossInput = row.querySelector('.new-product-component-loss');
         const percentage = parseFloat(percentageInput.value) || 0;
-        const loss = parseFloat(lossInput.value) || 0;
         if (percentage > 0) {
-            components.push({ surovinaId: select.value, percentage, loss });
+            components.push({ surovinaId: select.value, percentage });
             totalPercentage += percentage;
         }
     });
@@ -151,11 +161,23 @@ export function saveNewProduct() {
     if (isEditing) {
         const mixProduct = appState.suroviny.find(s => s.id === appState.ui.editingMixId);
         mixProduct.name = name;
+        mixProduct.customerId = customerId;
+        mixProduct.boxTypeId = boxTypeId;
         appState.mixDefinitions[appState.ui.editingMixId].components = components;
         showToast('Mix upraven');
     } else {
         const newMixId = generateId();
-        const newMixProduct = { id: newMixId, name, paletteWeight: 0, stock: 0, isMix: true, isActive: true, isProduct: false };
+        const newMixProduct = { 
+            id: newMixId, 
+            name, 
+            customerId, 
+            boxTypeId, 
+            paletteWeight: 0, 
+            stock: 0, 
+            isMix: true, 
+            isActive: true, 
+            isProduct: false 
+        };
         appState.suroviny.push(newMixProduct);
         appState.mixDefinitions[newMixId] = { components };
         

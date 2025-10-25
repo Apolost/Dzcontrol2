@@ -5,6 +5,7 @@
 // @ts-nocheck
 import { appState, saveState } from '../state.ts';
 import { showToast, DOMElements } from '../ui.ts';
+import { calculateTimeline } from '../services/calculations.ts';
 
 export function renderLineSettings() {
     const speedInput = document.getElementById('line-speed');
@@ -299,4 +300,84 @@ export function savePortioningSettings() {
     saveState();
     showToast('Nastavení porcovny uloženo.');
     modal.classList.remove('active');
+}
+
+// --- Intelligent Settings ---
+export function openIntelligentSettingsModal() {
+    const modal = DOMElements.intelligentSettingsModal;
+    const body = modal.querySelector('#intelligent-settings-body');
+    const date = appState.ui.selectedDate;
+
+    const { timeline } = calculateTimeline(date);
+    if (!timeline || timeline.length === 0) {
+        body.innerHTML = '<p>Pro dnešní den nejsou naplánována žádná kuřata.</p>';
+        modal.classList.add('active');
+        return;
+    }
+
+    const now = new Date();
+    const minutesNow = now.getHours() * 60 + now.getMinutes();
+
+    let flockToAnalyze = timeline.find(item => item.type === 'flock' && minutesNow >= item.startTime && minutesNow < item.endTime);
+    let statusText = 'Analýza pro <strong>aktuálně zpracovávaný</strong> chov:';
+    if (!flockToAnalyze) {
+        flockToAnalyze = timeline.find(item => item.type === 'flock' && item.startTime > minutesNow);
+        statusText = 'Analýza pro <strong>následující</strong> chov:';
+    }
+
+    if (!flockToAnalyze) {
+        body.innerHTML = '<p>Všechny chovy pro dnešní den již byly zpracovány.</p>';
+        modal.classList.add('active');
+        return;
+    }
+    
+    const { name, avgWeight, deviation = 0 } = flockToAnalyze;
+    const avgWeightG = avgWeight * 1000;
+    const minWeight = avgWeight * (1 - (deviation / 100));
+    const maxWeight = avgWeight * (1 + (deviation / 100));
+
+    let html = `
+        <div class="card" style="margin-bottom: 0;">
+            <div class="card-content">
+                <p>${statusText} <strong>${name}</strong></p>
+                <p>Průměrná váha: <strong>${avgWeight.toFixed(3)} kg</strong></p>
+                <p>Rozsah váhy: <strong>${minWeight.toFixed(3)} - ${maxWeight.toFixed(3)} kg</strong> (při odchylce ${deviation}%)</p>
+                <hr style="margin: 15px 0;">
+                <h4 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 10px;">Doporučení pro nastavení linky:</h4>
+                <ul style="list-style-type: disc; padding-left: 20px; display: flex; flex-direction: column; gap: 10px;">
+    `;
+
+    // 1. Meyn upper shackle setting
+    const meynSetting = avgWeightG + 50;
+    html += `<li><strong>Horní (Meyn):</strong> Nastavte na <strong>${Math.round(meynSetting)} g</strong>. Toto nastavení (${avgWeightG.toFixed(0)}g + 50g) optimalizuje řez pro aktuální průměrnou váhu.</li>`;
+
+    // 2. KFC Wings
+    if (minWeight * 1000 >= 1400) {
+        html += `<li style="color: var(--accent-success);"><strong>KFC Křídla:</strong> Chov je <strong>vhodný</strong>. Všechna kuřata (min. ${Math.round(minWeight*1000)}g) splňují minimální váhu 1400g.</li>`;
+    } else if (maxWeight * 1000 < 1400) {
+        html += `<li style="color: var(--accent-danger);"><strong>KFC Křídla:</strong> Chov je <strong>nevhodný</strong>. Žádné kuře nedosahuje minimální váhy 1400g.</li>`;
+    } else {
+        html += `<li style="color: #f59e0b;"><strong>KFC Křídla:</strong> Chov je <strong>částečně vhodný</strong>. Pouze těžší kuřata splní limit 1400g. Zvažte třídění.</li>`;
+    }
+    
+    // 3. Thighs
+    if (avgWeight >= 2.0) {
+        html += `<li><strong>Stehna:</strong> Vhodné pro vykostění ("na mastnou") kvůli vyšší průměrné váze.</li>`;
+    } else {
+         html += `<li><strong>Stehna:</strong> Standardní zpracování. Váha je optimální pro kalibrovaná stehna a čtvrtky.</li>`;
+    }
+
+    // 4. Rapid filleting machine
+    if (deviation <= 5) {
+        html += `<li style="color: var(--accent-success);"><strong>Filetovačka (Rapid):</strong> Nastavení rozpětí může být <strong>užší</strong>. Chov je velmi vyrovnaný (odchylka ${deviation}%), což povede k vysoké kvalitě řízků a minimálním ztrátám.</li>`;
+    } else if (deviation > 10) {
+         html += `<li style="color: var(--accent-danger);"><strong>Filetovačka (Rapid):</strong> Nastavení rozpětí musí být <strong>širší</strong>. Chov je velmi nevyrovnaný (odchylka ${deviation}%), hrozí riziko trhání prsou. Důkladně sledujte výstup.</li>`;
+    } else {
+         html += `<li style="color: #f59e0b;"><strong>Filetovačka (Rapid):</strong> Standardní nastavení rozpětí. Chov má průměrnou vyrovnanost (odchylka ${deviation}%).</li>`;
+    }
+    
+    html += `</ul></div></div>`;
+
+    body.innerHTML = html;
+    modal.classList.add('active');
 }

@@ -41,6 +41,7 @@ export function initializeDOMElements() {
         addMainOrderModal: document.getElementById('add-main-order-modal'),
         addSurovinyModal: document.getElementById('add-suroviny-modal'),
         addChangeModal: document.getElementById('add-change-modal'),
+        priceChangeModal: document.getElementById('price-change-modal'),
         mixRatioModal: document.getElementById('mix-ratio-modal'),
         addOrderModal: document.getElementById('add-order-modal'),
         planActionModal: document.getElementById('plan-action-modal'),
@@ -71,6 +72,12 @@ export function initializeDOMElements() {
         surovinaSourceModal: document.getElementById('surovina-source-modal'),
         yieldAdjustmentModal: document.getElementById('yield-adjustment-modal'),
         stockAdjustmentModal: document.getElementById('single-stock-adjustment-modal'),
+        boxSettingsModal: document.getElementById('box-settings-modal'),
+        traySettingsModal: document.getElementById('tray-settings-modal'),
+        quickOrderModal: document.getElementById('quick-order-modal'),
+        frozenMainModal: document.getElementById('frozen-main-modal'),
+        addFrozenProductModal: document.getElementById('add-frozen-product-modal'),
+        addFrozenRequestModal: document.getElementById('add-frozen-request-modal'),
         toastContainer: document.getElementById('toast-container'),
     };
 }

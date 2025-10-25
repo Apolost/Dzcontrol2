@@ -298,3 +298,19 @@
         </div>
     </div>
 </div>
+
+<div id="quick-order-modal" class="modal">
+    <div class="modal-content" style="max-width: 90vw; height: 90vh; display: flex; flex-direction: column;">
+        <div class="modal-header">
+            <h2 class="modal-title">Rychlá objednávka pro <span id="quick-order-customer-name"></span></h2>
+            <button class="btn-icon" data-action="close-modal"><i data-feather="x"></i></button>
+        </div>
+        <div class="modal-body" id="quick-order-table-container">
+            <!-- JS generated table -->
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" data-action="close-modal">Zrušit</button>
+            <button class="btn btn-primary" data-action="save-quick-order">Uložit objednávku</button>
+        </div>
+    </div>
+</div>

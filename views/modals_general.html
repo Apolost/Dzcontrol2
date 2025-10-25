@@ -211,32 +211,16 @@
                     <small style="display: block; font-weight: 400; text-align: left;">Přidá na sklad existující surovinu, která nepochází z dnešní výroby.</small>
                 </div>
             </button>
-             <button class="btn btn-primary" data-action="open-yield-adjustment-modal">
-                <i data-feather="sliders"></i>
-                 <div>
-                    <span>Z dnešní výroby (upřesnění)</span>
-                    <small style="display: block; font-weight: 400; text-align: left;">Upřesní skutečnou výtěžnost z dnes naskladněných kuřat.</small>
+            <button class="btn btn-primary" data-action="open-add-suroviny-modal-from-production">
+                <i data-feather="package"></i>
+                <div>
+                    <span>Z dnešní výroby (přídavek)</span>
+                    <small style="display: block; font-weight: 400; text-align: left;">Přidá na sklad surovinu z dnešní výroby po celých paletách nebo bednách.</small>
                 </div>
             </button>
         </div>
         <div class="modal-footer">
             <button class="btn btn-secondary" data-action="close-modal">Zrušit</button>
-        </div>
-    </div>
-</div>
-
-<div id="yield-adjustment-modal" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2 class="modal-title">Upřesnění denní výtěžnosti</h2>
-            <button class="btn-icon" data-action="close-modal"><i data-feather="x"></i></button>
-        </div>
-        <div class="modal-body" id="yield-adjustment-modal-body">
-            <!-- JS generated content -->
-        </div>
-        <div class="modal-footer">
-            <button class="btn btn-secondary" data-action="close-modal">Zrušit</button>
-            <button class="btn btn-primary" data-action="save-yield-adjustment">Uložit upřesnění</button>
         </div>
     </div>
 </div>

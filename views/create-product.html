@@ -7,14 +7,10 @@
         </div>
         <div class="form-row">
             <div class="form-field"><label for="new-prod-surovina">Surovina</label><select id="new-prod-surovina"></select></div>
-            <div class="form-field"><label for="new-prod-box-weight">Váha bedny (g)</label><input type="number" id="new-prod-box-weight"></div>
+            <div class="form-field"><label for="new-prod-box-weight">Výchozí váha bedny (g)</label><input type="number" id="new-prod-box-weight"></div>
             <div class="form-field">
-                <label for="new-prod-packaging-type">Typ balení pro Rychlé zadání</label>
-                <select id="new-prod-packaging-type">
-                    <option value="OA">Malé misky (OA)</option>
-                    <option value="RB">Rodinné balení (RB)</option>
-                    <option value="VL">Volně ložené (VL)</option>
-                </select>
+                <label for="new-prod-box-type">Typ bedny</label>
+                <select id="new-prod-box-type"></select>
             </div>
         </div>
         <div class="form-row">
@@ -54,7 +50,7 @@
         <div class="card-header"><h2 class="card-title">Existující produkty</h2></div>
         <div class="card-content">
             <table class="data-table" id="existing-products-table">
-                <thead><tr><th>Název</th><th>Zákazník</th><th>Surovina</th><th>Váha bedny (g)</th><th>Stav</th><th class="actions">Akce</th></tr></thead>
+                <thead><tr><th>Název</th><th>Zákazník</th><th>Surovina</th><th>Typ bedny</th><th>Stav</th><th class="actions">Akce</th></tr></thead>
                 <tbody id="existing-products-table-body"></tbody>
             </table>
         </div>

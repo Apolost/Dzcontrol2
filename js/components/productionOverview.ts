@@ -5,7 +5,8 @@
 // @ts-nocheck
 import { appState, saveState } from '../state.ts';
 import { DOMElements, ICONS, showToast, showConfirmation } from '../ui.ts';
-import { getDailyNeeds, getMaykawaThighsNeeded, getKfcSurovinyNeeds, getSpizyNeeds, calculateYieldData } from '../services/calculations.ts';
+import { getDailyNeeds, getMaykawaThighsNeeded, getKfcSurovinyNeeds, getSpizyNeeds, calculateYieldData, calculateTimeline } from '../services/calculations.ts';
+import { minutesToTimeString } from '../utils.ts';
 
 let partsChart = null;
 let rizkyChart = null;
@@ -30,128 +31,6 @@ function updateFlockRange(rowElement) {
         rangeEl.textContent = '';
     }
 }
-
-
-function minutesToTimeString(minutes) {
-    const h = Math.floor(minutes / 60) % 24;
-    const m = Math.round(minutes % 60);
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-}
-
-export function calculateTimeline(date) {
-    const dailyChickenData = appState.chickenCounts[date];
-    if (!dailyChickenData || !Array.isArray(dailyChickenData.flocks) || dailyChickenData.flocks.length === 0) {
-        return { timeline: [], totals: { totalChickens: 0, totalWeight: 0, totalTime: 0 } };
-    }
-
-    const startTimeStr = dailyChickenData.startTime || '06:00';
-    const delayHours = dailyChickenData.delayHours || 0;
-    const delayMinutes = dailyChickenData.delayMinutes || 0;
-    const totalDelayInMinutes = (delayHours * 60) + delayMinutes;
-    const lineSpeed = appState.lineSettings?.speed || 5000;
-
-    // --- AUTOMATIC PAUSE LOGIC ---
-    let eventsForTimeline = [...(appState.productionEvents[date] || [])];
-    const hasUserPause = eventsForTimeline.some(event => event.type === 'pause');
-    
-    if (!hasUserPause) {
-        const dayOfWeek = new Date(date + 'T12:00:00Z').getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-        let autoPauseTime = null;
-
-        if (dayOfWeek === 1) { // Monday
-            autoPauseTime = '09:30';
-        } else if (dayOfWeek >= 2 && dayOfWeek <= 5) { // Tuesday to Friday
-            autoPauseTime = '11:30';
-        }
-
-        if (autoPauseTime) {
-            eventsForTimeline.push({
-                id: `auto-pause-${date}`,
-                type: 'pause',
-                startTime: autoPauseTime,
-                isAutomatic: true // Flag to identify this pause
-            });
-        }
-    }
-    // --- END AUTOMATIC PAUSE LOGIC ---
-
-    const events = eventsForTimeline.map(event => {
-        const [h, m] = event.startTime.split(':').map(Number);
-        return {
-            ...event,
-            startTimeInMinutes: h * 60 + m,
-            duration: event.type === 'pause' ? 30 : (event.duration || 0)
-        };
-    }).sort((a, b) => a.startTimeInMinutes - b.startTimeInMinutes);
-
-    const timeline = [];
-    let [startH, startM] = startTimeStr.split(':').map(Number);
-    let currentTimeInMinutes = startH * 60 + startM;
-    let totalChickens = 0;
-    let totalWeight = 0;
-
-    dailyChickenData.flocks.forEach((flock, index) => {
-        if (!flock.count || flock.count <= 0) return;
-        
-        totalChickens += flock.count;
-        totalWeight += flock.count * (flock.avgWeight || 0);
-
-        const processingDuration = (flock.count / lineSpeed) * 60; // in minutes
-        
-        const entry = {
-            type: 'flock',
-            originalIndex: index,
-            name: flock.name,
-            avgWeight: flock.avgWeight,
-            count: flock.count,
-            startTime: currentTimeInMinutes,
-            endTime: currentTimeInMinutes + processingDuration
-        };
-        
-        timeline.push(entry);
-        currentTimeInMinutes = entry.endTime;
-    });
-    
-    const fullTimeline = [...timeline];
-    events.forEach(event => {
-        fullTimeline.push({
-            type: event.type,
-            startTime: event.startTimeInMinutes,
-            endTime: event.startTimeInMinutes + event.duration,
-            duration: event.duration,
-            id: event.id
-        });
-    });
-
-    fullTimeline.sort((a, b) => a.startTime - b.startTime);
-
-    // Recalculate times with events
-    let adjustedCurrentTime = (startH * 60 + startM) + totalDelayInMinutes;
-    let totalProcessingDuration = 0;
-    const finalTimeline = [];
-
-    for (const item of fullTimeline) {
-        let itemDuration;
-        if (item.type === 'flock') {
-            itemDuration = (item.count / lineSpeed) * 60;
-        } else {
-            itemDuration = item.duration;
-        }
-        
-        finalTimeline.push({
-            ...item,
-            startTime: adjustedCurrentTime,
-            endTime: adjustedCurrentTime + itemDuration,
-        });
-        adjustedCurrentTime += itemDuration;
-        totalProcessingDuration += itemDuration;
-    }
-    
-    const totalTime = totalProcessingDuration;
-
-    return { timeline: finalTimeline, totals: { totalChickens, totalWeight, totalTime } };
-}
-
 
 export function renderProductionOverview() {
     const timelineContainer = document.getElementById('production-timeline-container');
@@ -466,25 +345,55 @@ function renderPartsChart() {
         }
         case 'stehna': {
             const { yieldData, thighNeeds } = calculateYieldData(date, dailyData?.flocks, totals.totalWeight);
-            const totalThighsSurplus = yieldData.find(d => d.name === 'Stehna celkem')?.difference || 0;
-            
-            const labels = ['Horní Stehna', 'Spodní Stehna', 'Stehna', 'Čtvrtky', 'Na Steak'];
+            const thighYield = yieldData.find(d => d.name === 'Stehna celkem');
+            const totalThighsSurplus = thighYield?.difference || 0;
+
+            const datasets = [];
             const needsData = [
-                thighNeeds['HORNÍ STEHNA'] || 0,
-                thighNeeds['SPODNÍ STEHNA'] || 0,
+                thighNeeds['Na dělení (H/S)'] || 0,
+                thighNeeds['Na Čtvrtky'] || 0,
                 thighNeeds['STEHNA'] || 0,
-                thighNeeds['ČTVRTKY'] || 0,
                 thighNeeds['Na Steak (Maykawa)'] || 0
             ];
             
+            if (needsData[0] > 0) datasets.push({ label: 'Na dělení (H/S)', data: [needsData[0]], backgroundColor: 'rgba(255, 159, 64, 0.7)' }); // orange
+            if (needsData[1] > 0) datasets.push({ label: 'Na Čtvrtky', data: [needsData[1]], backgroundColor: 'rgba(75, 192, 192, 0.7)' }); // teal
+            if (needsData[2] > 0) datasets.push({ label: 'Na Stehna (přímé)', data: [needsData[2]], backgroundColor: 'rgba(54, 162, 235, 0.7)' }); // blue
+            if (needsData[3] > 0) datasets.push({ label: 'Na Steak', data: [needsData[3]], backgroundColor: 'rgba(153, 102, 255, 0.7)' }); // purple
+
+            if (totalThighsSurplus > 0) {
+                 datasets.push({ label: 'Zůstatek', data: [totalThighsSurplus], backgroundColor: 'rgba(201, 203, 207, 0.7)' }); // grey
+            } else if (totalThighsSurplus < 0) {
+                 datasets.push({ label: 'Chybí', data: [Math.abs(totalThighsSurplus)], backgroundColor: 'rgba(255, 99, 132, 0.7)' }); // red
+            }
+
             chartConfig = {
                 type: 'bar',
                 data: {
-                    labels: labels,
-                    datasets: [
-                        { label: 'Potřeba (kg)', data: needsData, backgroundColor: 'rgba(201, 203, 207, 0.6)' },
-                        { label: 'Zůstatek (společný) (kg)', data: Array(5).fill(totalThighsSurplus), backgroundColor: totalThighsSurplus >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)' }
-                    ]
+                    labels: ['Využití stehen'], // Single category bar
+                    datasets: datasets
+                },
+                options: {
+                    plugins: {
+                        title: { display: true, text: 'Využití celkové produkce stehen' },
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) label += ': ';
+                                    if (context.parsed.y !== null) label += `${context.parsed.y.toFixed(2)} kg`;
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, title: { display: true, text: 'Hmotnost (kg)' } }
+                    }
                 }
             };
             break;
@@ -497,7 +406,8 @@ function renderPartsChart() {
             responsive: true,
             maintainAspectRatio: false,
             scales: { y: { beginAtZero: true, title: { display: true, text: 'Hmotnost (kg)' } } },
-            plugins: { legend: { position: 'top' } }
+            plugins: { legend: { position: 'top' } },
+            ...chartConfig.options // Merge specific options like stacking
         }
     });
 }

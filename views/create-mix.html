@@ -3,6 +3,8 @@
     <div class="card">
         <div class="form-row">
             <div class="form-field"><label for="new-product-name">Název mixu</label><input type="text" id="new-product-name"></div>
+            <div class="form-field"><label for="new-mix-customer">Zákazník</label><select id="new-mix-customer"></select></div>
+            <div class="form-field"><label for="new-mix-box-type">Typ bedny</label><select id="new-mix-box-type"></select></div>
         </div>
         <hr style="border: none; border-top: 1px solid var(--border-color); margin: 20px 0;">
         <h3>Složení mixu</h3>
@@ -19,7 +21,7 @@
         <div class="card-header"><h2 class="card-title">Existující mixy</h2></div>
         <div class="card-content">
             <table class="data-table" id="existing-mixes-table">
-                <thead><tr><th>Název mixu</th><th>Složení</th><th class="actions">Akce</th></tr></thead>
+                <thead><tr><th>Název mixu</th><th>Zákazník</th><th>Složení</th><th class="actions">Akce</th></tr></thead>
                 <tbody id="existing-mixes-table-body"></tbody>
             </table>
         </div>

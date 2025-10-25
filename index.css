@@ -417,7 +417,21 @@ input:focus, select:focus, textarea:focus {
 .modal-title { font-size: 1.5rem; font-weight: 700; }
 .modal-body { max-height: 75vh; overflow-y: auto; padding-right: 15px; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; flex-wrap: wrap;}
-/* Large modals */
+
+/* Generic fullscreen-like modal for complex views */
+.modal-content.modal-fullscreen {
+    width: 95vw;
+    max-width: 1400px; /* Wider for desktop */
+    height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+.modal-content.modal-fullscreen .modal-body {
+    flex-grow: 1;
+    max-height: none;
+    padding-right: 0;
+}
+/* Other large modals that can use this style */
 #add-order-modal .modal-content, #kfc-add-order-modal .modal-content, #kfc-stock-modal .modal-content, #spizy-modal .modal-content {
     width: 95vw;
     max-width: 90vw;
@@ -432,6 +446,50 @@ input:focus, select:focus, textarea:focus {
 #rizky-add-order-modal, #spizy-add-order-modal, #spizy-stock-modal, #maykawa-add-order-modal, #spizy-ingredient-order-modal { z-index: 1010; }
 #confirmation-modal, #calibration-source-modal { z-index: 1020; }
 #calibration-setup-modal { z-index: 1030; }
+
+@media (max-width: 991.98px) {
+    .modal-content.modal-fullscreen {
+        width: 100vw;
+        height: 100vh;
+        border-radius: 0;
+        padding: 16px;
+    }
+}
+
+/* Box settings modal specific layout */
+.box-settings-body {
+    display: flex;
+    gap: 24px;
+    flex-grow: 1;
+    overflow: hidden;
+}
+.box-settings-column-assignments {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+    min-width: 300px;
+}
+.box-settings-column-management {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 280px;
+}
+
+/* Responsive layout for box settings modal on smaller screens */
+@media (max-width: 991.98px) {
+    .box-settings-body {
+        flex-direction: column;
+        overflow-y: auto;
+        gap: 16px;
+    }
+
+    .box-settings-column-assignments,
+    .box-settings-column-management {
+        flex: 1 1 auto;
+        min-height: 400px;
+    }
+}
 
 
 /* Toast */
@@ -643,6 +701,46 @@ input:focus, select:focus, textarea:focus {
 }
 .performance-green { color: var(--accent-success); }
 .performance-red { color: var(--accent-danger); }
+
+/* Responsive Calendar */
+@media (max-width: 767.98px) {
+    #view-calendar .calendar-grid {
+        /* On mobile, switch to a 7-column grid without week numbers */
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px; /* Reduce gap for smaller screens */
+    }
+    #view-calendar .week-number,
+    #view-calendar .calendar-header:first-child {
+        /* Hide the week number column and its corresponding header */
+        display: none;
+    }
+    #view-calendar .calendar-day {
+        min-height: 80px; /* Make day cells a bit smaller */
+        padding: 4px;
+        font-size: 0.9em;
+    }
+    #view-calendar .day-number {
+        font-size: 0.9em;
+        margin-bottom: 2px;
+    }
+    #view-calendar .day-pill {
+        padding: 2px 4px;
+        font-size: 0.7rem;
+        border-radius: 4px;
+    }
+
+    /* Make toolbar more compact on mobile */
+    .calendar-toolbar {
+        gap: 8px;
+    }
+    .calendar-toolbar .btn {
+        padding: 8px 10px;
+        font-size: 0.8rem;
+    }
+    #current-month-display {
+        font-size: 1.25rem;
+    }
+}
 
 /* Print Styles */
 @media print {

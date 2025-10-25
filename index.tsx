@@ -4,7 +4,7 @@
 */
 
 // @ts-nocheck
-import { loadState, startAutoSave } from './js/state.ts';
+import { loadState, startAutoSave, isDirty, markAsDirty } from './js/state.ts';
 import { bindEvents, render, startClock, updateInfoBar } from './js/main.ts';
 import { initializeDOMElements } from './js/ui.ts';
 
@@ -16,7 +16,11 @@ async function loadModals() {
         'modals_settings.html',
         'modals_employees.html',
         'modals_minced_meat.html',
-        'modals_monthly_overview.html'
+        'modals_monthly_overview.html',
+        'modals_stock.html',
+        'modals_trays.html',
+        'modals_changes.html',
+        'modals_frozen.html'
     ];
     const container = document.getElementById('modals-container');
     if (!container) {
@@ -51,6 +55,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     startAutoSave();
     render();
     feather.replace(); // Initialize all icons on initial load
+
+    // --- UNSAVED CHANGES WARNING ---
+    window.addEventListener('beforeunload', (event) => {
+        if (isDirty) {
+            // Most modern browsers show a generic message and ignore the return value.
+            // But it's good practice to include it for compatibility.
+            event.preventDefault(); // Required for Chrome.
+            event.returnValue = 'Máte neuložené změny. Opravdu chcete opustit stránku?';
+        }
+    });
+
+    // --- GLOBAL DIRTY FLAG HANDLERS ---
+    document.body.addEventListener('input', () => markAsDirty());
+    document.body.addEventListener('change', () => markAsDirty());
+
 
     // --- LISTENER FOR INSTANT DATA LOAD ---
     document.body.addEventListener('appDataLoaded', () => {

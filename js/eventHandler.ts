@@ -20,6 +20,7 @@ import * as calculator from './components/calculator.ts';
 import * as productionOverview from './components/productionOverview.ts';
 import * as rawMaterialOrders from './components/rawMaterialOrders.ts';
 import * as qrCode from './components/qrCode.ts';
+import * as stock from './components/stock.ts';
 import * as products from './settings/products.ts';
 import * as mixes from './settings/mixes.ts';
 import * as boxWeights from './settings/boxWeights.ts';
@@ -28,6 +29,8 @@ import * as customers from './settings/customers.ts';
 import * as lineSettings from './settings/lineSettings.ts';
 import * as exportData from './components/export.ts';
 import * as monthlyOverview from './components/monthlyOverview.ts';
+import * as frozenProducts from './components/frozenProducts.ts';
+import * as frozen from './components/frozen.ts';
 
 
 export function bindGlobalEvents() {
@@ -73,6 +76,10 @@ function handleGlobalClick(e) {
         case 'next-day': changeDate(1); break;
 
         // Main Page
+        case 'open-frozen-main-modal':
+            frozen.openFrozenMainModal();
+            DOMElements.productionActionsModal.classList.remove('active');
+            break;
         case 'quick-entry-done': mainPage.toggleQuickEntryDone(id); break;
         case 'toggle-spizy-done': mainPage.toggleSpizyDone(actionTarget); break;
         case 'toggle-main-page-order-item-done': mainPage.toggleMainPageOrderItemDone(actionTarget); break;
@@ -89,6 +96,7 @@ function handleGlobalClick(e) {
         case 'save-shortened-order': mainPage.saveShortenedOrder(); break;
         case 'open-single-stock-adjustment': mainPage.openSingleStockAdjustmentModal(actionTarget.dataset.surovinaId); break;
         case 'save-single-stock-adjustment': mainPage.saveSingleStockAdjustment(); break;
+        case 'dismiss-price-change-alert': mainPage.dismissPriceChangeAlert(id); break;
         case 'open-add-pre-production-modal': 
             mainPage.openAddPreProductionModal();
             DOMElements.preProductionModal.classList.remove('active');
@@ -131,6 +139,8 @@ function handleGlobalClick(e) {
         case 'save-added-items': orders.saveAddedItems(); break;
         case 'save-main-order': orders.saveMainOrder(); break;
         case 'save-mix-ratio': orders.saveMixRatio(); break;
+        case 'open-quick-order-modal': orders.openQuickOrderModal(actionTarget.dataset.customerId); break;
+        case 'save-quick-order': orders.saveQuickOrder(); break;
 
         // Calendar
         case 'prev-month': calendar.changeMonth(-1); break;
@@ -149,6 +159,10 @@ function handleGlobalClick(e) {
         case 'edit-change': changes.openAddChangeModal(id); break;
         case 'delete-change': changes.deleteChange(id); break;
         case 'save-change': changes.saveChange(); break;
+        case 'add-price-change': changes.openPriceChangeModal(); break;
+        case 'edit-price-change': changes.openPriceChangeModal(id); break;
+        case 'delete-price-change': changes.deletePriceChange(id); break;
+        case 'save-price-change': changes.savePriceChange(); break;
 
         // Calculator
         case 'export-calculator-pdf': calculator.exportCalculatorToPdf(); break;
@@ -173,6 +187,22 @@ function handleGlobalClick(e) {
         case 'delete-qr-code': qrCode.handleDeleteQrCode(id); break;
         case 'print-qr-code': qrCode.handlePrintQrCode(id, actionTarget.dataset.surovinaName); break;
 
+        // Stock - Boxes
+        case 'open-box-settings': stock.openBoxSettingsModal(); break;
+        case 'save-box-assignments': stock.handleSaveBoxAssignments(); break;
+        case 'save-box-type': stock.handleSaveBoxType(); break;
+        case 'edit-box-type': stock.handleEditBoxType(id); break;
+        case 'delete-box-type': stock.handleDeleteBoxType(id); break;
+        case 'cancel-edit-box-type': stock.handleCancelEditBoxType(); break;
+
+        // Stock - Trays
+        case 'open-tray-settings': stock.openTraySettingsModal(); break;
+        case 'save-tray-assignments': stock.handleSaveTrayAssignments(); break;
+        case 'save-tray-type': stock.handleSaveTrayType(); break;
+        case 'edit-tray-type': stock.handleEditTrayType(id); break;
+        case 'delete-tray-type': stock.handleDeleteTrayType(id); break;
+        case 'cancel-edit-tray-type': stock.handleCancelEditTrayType(); break;
+
         // Settings -> Customers
         case 'save-customer': customers.saveCustomer(); break;
         case 'edit-customer': customers.openCustomerEditor(id); break;
@@ -196,6 +226,13 @@ function handleGlobalClick(e) {
         case 'save-new-product': mixes.saveNewProduct(); break;
         case 'cancel-edit-mix': mixes.cancelEditMix(); break;
 
+        // Settings -> Frozen Products
+        case 'open-add-frozen-product-modal': frozenProducts.openAddFrozenProductModal(); break;
+        case 'save-frozen-product': frozenProducts.saveFrozenProduct(); break;
+        case 'edit-frozen-product': frozenProducts.openAddFrozenProductModal(id); break;
+        case 'delete-frozen-product': frozenProducts.deleteFrozenProduct(id); break;
+        case 'cancel-edit-frozen-product': frozenProducts.cancelEditFrozenProduct(); break;
+
         // Settings -> Box Weights
         case 'toggle-box-weight-product-active': boxWeights.toggleBoxWeightProductActive(actionTarget.dataset.customerId, actionTarget.dataset.surovinaId); break;
         case 'save-all-box-weights': boxWeights.saveAllBoxWeights(); break;
@@ -214,6 +251,7 @@ function handleGlobalClick(e) {
         case 'save-thigh-split-settings': lineSettings.saveThighSplitSettings(); break;
         case 'open-portioning-settings-modal': lineSettings.openPortioningSettingsModal(); break;
         case 'save-portioning-settings': lineSettings.savePortioningSettings(); break;
+        case 'open-intelligent-settings-modal': lineSettings.openIntelligentSettingsModal(); break;
         
         // KFC
         case 'open-kfc-add-order': kfc.openKfcAddOrderModal(); break;
@@ -241,6 +279,11 @@ function handleGlobalClick(e) {
         case 'save-spizy-settings': spizy.saveSpizySettings(); break;
         case 'save-spizy-ingredient-order': spizy.saveSpizyIngredientOrder(); break;
         
+        // Frozen Production
+        case 'open-add-frozen-request-modal': frozen.openAddFrozenRequestModal(); break;
+        case 'save-frozen-request': frozen.saveFrozenRequest(); break;
+        case 'delete-frozen-order': frozen.deleteFrozenOrder(id); break;
+
         // Standalone Modals
         case 'open-production-modal': modals.openProductionModal(); break;
         case 'open-maykawa-modal':
@@ -255,91 +298,67 @@ function handleGlobalClick(e) {
             modals.openMincedMeatModal();
             DOMElements.productionActionsModal.classList.remove('active');
             break;
-        case 'open-add-minced-meat-order-modal': modals.openAddMincedMeatOrderModal(); break;
-        case 'save-minced-meat-order': modals.saveMincedMeatOrder(); break;
-        case 'delete-minced-meat-order-item': modals.deleteMincedMeatOrderItem(actionTarget.dataset.orderId, actionTarget.dataset.itemId); break;
-        case 'open-rizky-add-order-modal': modals.openRizkyAddOrderModal(); break;
-        case 'save-rizky-orders': modals.saveRizkyOrders(); break;
-        case 'open-maykawa-add-order-modal': modals.openMaykawaAddOrderModal(); break;
-        case 'save-maykawa-orders': modals.saveMaykawaOrders(); break;
-        case 'open-surovina-source-modal': modals.openSurovinaSourceModal(); break;
-        case 'open-add-suroviny-modal-from-stock': modals.openAddSurovinyModalFromStock(); break;
-        case 'open-yield-adjustment-modal': modals.openYieldAdjustmentModal(); break;
-        case 'save-yield-adjustment': modals.saveYieldAdjustment(); break;
-        case 'save-added-suroviny': modals.saveAddedSuroviny(); break;
-        
-        // General
-        case 'go-to-view':
-            const targetView = actionTarget.dataset.viewTarget;
-            if (targetView) {
-                appState.ui.activeView = targetView;
-                render();
-                if (actionTarget.closest('#production-actions-modal')) {
-                    DOMElements.productionActionsModal.classList.remove('active');
-                }
-            }
-            break;
         case 'close-modal':
             const modal = actionTarget.closest('.modal');
             if (modal) modal.classList.remove('active');
+            break;
+        case 'open-surovina-source-modal': modals.openSurovinaSourceModal(); break;
+        case 'open-add-suroviny-modal-from-stock': modals.openAddSurovinyModalFromStock(); break;
+        case 'open-add-suroviny-modal-from-production': modals.openAddSurovinyModalFromProduction(); break;
+        case 'save-added-suroviny': modals.saveAddedSuroviny(); break;
+
+        // Default
+        default:
+            // This is for actions that might be handled inside a specific view's render function
+            // (like dynamically generated buttons that don't need a global handler).
             break;
     }
 }
 
 function handleGlobalChange(e) {
-    const { target } = e;
-    if (target.matches('.kfc-produced-input')) {
+    const target = e.target;
+    if (target.classList.contains('kfc-produced-input')) {
         kfc.handleKfcProductionChange(target);
-    }
-    if (target.matches('.kfc-quick-stock-input')) {
-        mainPage.handleKfcQuickStockChange(target);
-    }
-    if (target.matches('.spizy-done-input')) {
-        mainPage.handleSpizyDoneChange(target);
-    }
-    if (target.matches('.main-order-done-input')) {
-        mainPage.handleMainOrderDoneChange(target);
-    }
-     if (target.matches('.pre-production-done-input')) {
+    } else if (target.matches('#calculator-item-surovina, #calculator-item-type')) {
+        calculator.renderCustomerInputs();
+    } else if (target.matches('.shortage-stock-input')) {
+        mainPage.handleShortageStockChange(target);
+    } else if (target.matches('.shortage-done-count-input')) {
+        mainPage.handleShortageDoneCountChange(target);
+    } else if (target.matches('.pre-production-done-input')) {
         mainPage.handlePreProductionDoneChange(target);
     }
-    if (target.id === 'calculator-item-surovina' || target.id === 'calculator-item-type') {
-        calculator.renderCustomerInputs();
-    }
-    if (target.matches('.shortage-stock-input')) {
-        mainPage.handleShortageStockChange(target);
-    }
-    if (target.matches('.shortage-done-count-input')) {
-        mainPage.handleShortageDoneCountChange(target);
-    }
-    if (target.matches('[data-action="toggle-item-stabilized"]')) {
+}
+
+function handleGlobalInput(e) {
+     const target = e.target;
+    if (target.classList.contains('spizy-config-input')) {
+        spizy.handleSpizySettingsInput();
+    } else if (target.closest('#kfc-staff-modal')) {
+        kfc.calculateKfcStaffing();
+    } else if (target.classList.contains('spizy-done-input')) {
+        spizy.handleSpizyDoneChange(target);
+    } else if (target.classList.contains('main-order-done-input')) {
+        mainPage.handleMainOrderDoneChange(target);
+    } else if (target.matches('[data-action="toggle-item-stabilized"]')) {
         const { orderId, itemId } = target.dataset;
         const order = appState.orders.find(o => o.id === orderId);
         const item = order?.items.find(i => i.id === itemId);
         if (item) {
             item.isStabilized = target.checked;
-
-            // Save this preference for future orders
             const customerId = order.customerId;
             const type = item.type;
+            
+            // Save this preference for future orders
             if (!appState.mincedMeatStabilizedDefaults[customerId]) {
                 appState.mincedMeatStabilizedDefaults[customerId] = {};
             }
             appState.mincedMeatStabilizedDefaults[customerId][type] = target.checked;
 
             saveState();
-             // If the change happens in the minced meat modal, re-render its content
-            if (target.closest('#minced-meat-modal')) {
-                modals.openMincedMeatModal(); // This function re-renders the content
+            if (DOMElements.mincedMeatModal.classList.contains('active')) {
+                modals.renderMincedMeatModalContent();
             }
         }
-    }
-}
-
-function handleGlobalInput(e) {
-    if (e.target.matches('.spizy-config-input')) {
-        spizy.handleSpizySettingsInput();
-    } else if (e.target.id === 'kfc-staff-added') {
-        kfc.calculateKfcStaffing();
     }
 }

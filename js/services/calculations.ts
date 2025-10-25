@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -62,7 +63,7 @@ export function getDailyNeeds(date, customerFilter = null, ignoreDone = false) {
             if (components) {
                 components.forEach(comp => {
                     const grossWeight = totalWeightInKg * (comp.percentage / 100);
-                    const netWeight = grossWeight * (1 - ((comp.loss || 0) / 100));
+                    const netWeight = grossWeight;
                     needs[comp.surovinaId] = (needs[comp.surovinaId] || 0) + netWeight;
                 });
             }
@@ -153,9 +154,10 @@ export function getSpizyNeeds(date) {
 
 export function calculateYieldData(date, flocks, totalChickenWeight) {
     const yieldData = [];
+    const thighNeeds = {}; // Will hold breakdown of what thighs are used for
 
     if (totalChickenWeight <= 0 || !flocks) {
-        return { yieldData: [], thighNeeds: {} };
+        return { yieldData, thighNeeds };
     }
     
     const dailyNeeds = getDailyNeeds(date, null, true); // Ignore done items for total overview
@@ -163,17 +165,39 @@ export function calculateYieldData(date, flocks, totalChickenWeight) {
     const adjustments = appState.yieldAdjustments?.[date] || {};
     const getSurovina = (name) => appState.suroviny.find(s => s.name.toUpperCase() === name.toUpperCase());
     
+    // Suroviny definitions needed for thigh/quarter logic
+    const ctvrtkySurovina = getSurovina('ČTVRTKY');
+    const horniStehnaSurovina = getSurovina('HORNÍ STEHNA');
+    const spodniStehnaSurovina = getSurovina('SPODNÍ STEHNA');
+    const stehnaCelkemSurovina = getSurovina('STEHNA');
+    const zadniDilySurovina = getSurovina('ZADNÍ DÍLY (SKELETY)') || getSurovina('HRBETY');
+
+    // --- Process 'Čtvrtky' needs first, as they affect 'Zadní díly' production ---
+    const ctvrtkyNeededKg = (ctvrtkySurovina && dailyNeeds[ctvrtkySurovina.id]) ? dailyNeeds[ctvrtkySurovina.id] : 0;
+    let zadniDilyConsumedByCtvrtky = 0;
+    if (ctvrtkyNeededKg > 0) {
+        // Based on industry ratios where leg quarter is heavier than whole leg due to the back part.
+        const CtvrtkaToStehnoRatio = 0.727; 
+        const CtvrtkaToZadniDilRatio = 0.273;
+        
+        const stehnaForCtvrtky = ctvrtkyNeededKg * CtvrtkaToStehnoRatio;
+        zadniDilyConsumedByCtvrtky = ctvrtkyNeededKg * CtvrtkaToZadniDilRatio;
+        
+        // We account for the 'stehno' part of the 'čtvrtka' in the thigh pool.
+        thighNeeds['Na Čtvrtky'] = stehnaForCtvrtky;
+    }
+
     // --- Schnitzel to Breast Calculation ---
     const rizkySurovina = getSurovina('ŘÍZKY');
     const prsaSurovina = getSurovina('PRSA');
     const rizkyOrderKg = (rizkySurovina && dailyNeeds[rizkySurovina.id]) ? dailyNeeds[rizkySurovina.id] : 0;
     const prsaNeededForRizky = rizkyOrderKg > 0 ? rizkyOrderKg / 0.70 : 0;
 
-    // --- Define Parts ---
+    // --- Define & Process Primary Parts ---
     const primaryParts = [
         { name: 'Prsa', yieldKey: 'prsa', surovina: prsaSurovina },
         { name: 'Křídla', yieldKey: 'kridla', surovina: getSurovina('KŘÍDLA') },
-        { name: 'Zadní díly (skelety)', yieldKey: 'zadniDily', surovina: getSurovina('ZADNÍ DÍLY (SKELETY)') || getSurovina('HRBETY') },
+        { name: 'Zadní díly (skelety)', yieldKey: 'zadniDily', surovina: zadniDilySurovina },
         { name: 'Kůže', yieldKey: 'kuze', surovina: getSurovina('KŮŽE') },
         { name: 'Kosti', yieldKey: 'kosti', surovina: getSurovina('KOSTI') },
         { name: 'Játra', yieldKey: 'jatra', surovina: getSurovina('JÁTRA') },
@@ -182,19 +206,16 @@ export function calculateYieldData(date, flocks, totalChickenWeight) {
         { name: 'Krky', yieldKey: 'krky', surovina: getSurovina('KRKY') },
     ];
     
-    const thighRelatedSuroviny = [
-        getSurovina('STEHNA'),
-        getSurovina('ČTVRTKY'),
-        getSurovina('HORNÍ STEHNA'),
-        getSurovina('SPODNÍ STEHNA'),
-    ].filter(Boolean); // Filter out any not found suroviny
-    
-    // --- Process Primary Parts ---
     primaryParts.forEach(part => {
         const adjustedKg = part.surovina ? adjustments[part.surovina.id] : undefined;
-        const producedKg = adjustedKg !== undefined 
+        let producedKg = adjustedKg !== undefined 
             ? adjustedKg 
             : totalChickenWeight * ((yieldSettings[part.yieldKey] || 0) / 100);
+
+        // Adjust 'Zadní díly' production because part of it is sold with 'Čtvrtky'
+        if (part.surovina && zadniDilySurovina && part.surovina.id === zadniDilySurovina.id) {
+            producedKg -= zadniDilyConsumedByCtvrtky;
+        }
 
         let neededKg = 0;
         if (part.surovina && dailyNeeds[part.surovina.id]) {
@@ -221,33 +242,66 @@ export function calculateYieldData(date, flocks, totalChickenWeight) {
         yieldData.push(dataItem);
     });
 
-    // --- Process "Stehna celkem" as a single pool ---
-    const totalThighsProducedKg = totalChickenWeight * ((yieldSettings.stehnaCelkem || 0) / 100);
-    let totalThighsNeededKg = 0;
-    const thighNeeds = {};
+    // --- Process Horní/Spodní Stehna Production from splitting 'Stehna celkem' ---
+    const horniNeededKg = (horniStehnaSurovina && dailyNeeds[horniStehnaSurovina.id]) ? dailyNeeds[horniStehnaSurovina.id] : 0;
+    const spodniNeededKg = (spodniStehnaSurovina && dailyNeeds[spodniStehnaSurovina.id]) ? dailyNeeds[spodniStehnaSurovina.id] : 0;
+    
+    if (horniNeededKg > 0 || spodniNeededKg > 0) {
+        const { upperThighPercent, lowerThighPercent } = appState.thighSplitSettings;
+        const upperPercent = upperThighPercent / 100;
+        const lowerPercent = lowerThighPercent / 100;
 
-    thighRelatedSuroviny.forEach(surovina => {
-        const neededKg = dailyNeeds[surovina.id] || 0;
-        if (neededKg > 0) {
-            totalThighsNeededKg += neededKg;
-            thighNeeds[surovina.name] = neededKg;
+        // Determine total whole thighs needed based on the larger requirement
+        const stehnaNeededForUpper = upperPercent > 0 ? horniNeededKg / upperPercent : 0;
+        const stehnaNeededForLower = lowerPercent > 0 ? spodniNeededKg / lowerPercent : 0;
+        const totalStehnaToSplit = Math.max(stehnaNeededForUpper, stehnaNeededForLower);
+
+        if (totalStehnaToSplit > 0) {
+            thighNeeds['Na dělení (H/S)'] = totalStehnaToSplit;
+
+            const producedHorni = totalStehnaToSplit * upperPercent;
+            const producedSpodni = totalStehnaToSplit * lowerPercent;
+            
+            yieldData.push({
+                name: 'Horní stehna',
+                produced: producedHorni,
+                needed: horniNeededKg,
+                difference: producedHorni - horniNeededKg,
+                paletteWeight: horniStehnaSurovina?.paletteWeight || 0
+            });
+            yieldData.push({
+                name: 'Spodní stehna',
+                produced: producedSpodni,
+                needed: spodniNeededKg,
+                difference: producedSpodni - spodniNeededKg,
+                paletteWeight: spodniStehnaSurovina?.paletteWeight || 0
+            });
         }
-    });
+    }
 
-    // Add Maykawa needs
+    // --- Process "Stehna celkem" as a single pool ---
+    // Add direct needs for 'Stehna' and Maykawa
+    if (stehnaCelkemSurovina && dailyNeeds[stehnaCelkemSurovina.id] > 0) {
+        thighNeeds[stehnaCelkemSurovina.name] = dailyNeeds[stehnaCelkemSurovina.id];
+    }
     const maykawaThighsNeeded = getMaykawaThighsNeeded(date);
     if (maykawaThighsNeeded > 0) {
-        totalThighsNeededKg += maykawaThighsNeeded;
         thighNeeds['Na Steak (Maykawa)'] = maykawaThighsNeeded;
     }
 
-    const stehnaSurovinaForWeight = getSurovina('STEHNA');
+    const totalThighsNeededKg = Object.values(thighNeeds).reduce((sum, val) => sum + val, 0);
+    
+    const adjustedStehnaKg = stehnaCelkemSurovina ? adjustments[stehnaCelkemSurovina.id] : undefined;
+    const totalThighsProducedKg = adjustedStehnaKg !== undefined
+        ? adjustedStehnaKg
+        : totalChickenWeight * ((yieldSettings.stehnaCelkem || 0) / 100);
+
     yieldData.push({ 
         name: 'Stehna celkem', 
         produced: totalThighsProducedKg, 
         needed: totalThighsNeededKg, 
         difference: totalThighsProducedKg - totalThighsNeededKg,
-        paletteWeight: stehnaSurovinaForWeight?.paletteWeight || 0
+        paletteWeight: stehnaCelkemSurovina?.paletteWeight || 0
     });
     
     // --- "Prdele" Calculation ---
@@ -257,8 +311,7 @@ export function calculateYieldData(date, flocks, totalChickenWeight) {
 
     if (prdeleSurovina) {
         flocks.forEach(flock => {
-            // Chickens from 800g to 1450g
-            if (flock.avgWeight >= 0.8 && flock.avgWeight <= 1.45) {
+            if (flock.avgWeight >= 0.8 && flock.avgWeight <= 1.45) { // Chickens from 800g to 1450g
                 prdeleProducedKg += (flock.count || 0) * PRDEL_WEIGHT_KG;
             }
         });
@@ -269,8 +322,7 @@ export function calculateYieldData(date, flocks, totalChickenWeight) {
         }
 
         const prdeleNeededKg = dailyNeeds[prdeleSurovina.id] || 0;
-        // Add to the table only if it's produced or needed
-        if (prdeleProducedKg > 0 || prdeleNeededKg > 0) {
+        if (prdeleProducedKg > 0 || prdeleNeededKg > 0) { // Add to the table only if it's produced or needed
             yieldData.push({
                 name: 'Prdele',
                 produced: prdeleProducedKg,
@@ -282,4 +334,118 @@ export function calculateYieldData(date, flocks, totalChickenWeight) {
     }
 
     return { yieldData, thighNeeds };
+}
+
+export function calculateTimeline(date) {
+    const dailyChickenData = appState.chickenCounts[date];
+    if (!dailyChickenData || !Array.isArray(dailyChickenData.flocks) || dailyChickenData.flocks.length === 0) {
+        return { timeline: [], totals: { totalChickens: 0, totalWeight: 0, totalTime: 0 } };
+    }
+
+    const startTimeStr = dailyChickenData.startTime || '06:00';
+    const delayHours = dailyChickenData.delayHours || 0;
+    const delayMinutes = dailyChickenData.delayMinutes || 0;
+    const totalDelayInMinutes = (delayHours * 60) + delayMinutes;
+    const lineSpeed = appState.lineSettings?.speed || 5000;
+
+    // --- AUTOMATIC PAUSE LOGIC ---
+    let eventsForTimeline = [...(appState.productionEvents[date] || [])];
+    const hasUserPause = eventsForTimeline.some(event => event.type === 'pause');
+    
+    if (!hasUserPause) {
+        const dayOfWeek = new Date(date + 'T12:00:00Z').getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+        let autoPauseTime = null;
+
+        if (dayOfWeek === 1) { // Monday
+            autoPauseTime = '09:30';
+        } else if (dayOfWeek >= 2 && dayOfWeek <= 5) { // Tuesday to Friday
+            autoPauseTime = '11:30';
+        }
+
+        if (autoPauseTime) {
+            eventsForTimeline.push({
+                id: `auto-pause-${date}`,
+                type: 'pause',
+                startTime: autoPauseTime,
+                isAutomatic: true // Flag to identify this pause
+            });
+        }
+    }
+    // --- END AUTOMATIC PAUSE LOGIC ---
+
+    const events = eventsForTimeline.map(event => {
+        const [h, m] = event.startTime.split(':').map(Number);
+        return {
+            ...event,
+            startTimeInMinutes: h * 60 + m,
+            duration: event.type === 'pause' ? 30 : (event.duration || 0)
+        };
+    }).sort((a, b) => a.startTimeInMinutes - b.startTimeInMinutes);
+
+    const timeline = [];
+    let [startH, startM] = startTimeStr.split(':').map(Number);
+    let currentTimeInMinutes = startH * 60 + startM;
+    let totalChickens = 0;
+    let totalWeight = 0;
+
+    dailyChickenData.flocks.forEach((flock, index) => {
+        if (!flock.count || flock.count <= 0) return;
+        
+        totalChickens += flock.count;
+        totalWeight += flock.count * (flock.avgWeight || 0);
+
+        const processingDuration = (flock.count / lineSpeed) * 60; // in minutes
+        
+        const entry = {
+            type: 'flock',
+            originalIndex: index,
+            name: flock.name,
+            avgWeight: flock.avgWeight,
+            count: flock.count,
+            startTime: currentTimeInMinutes,
+            endTime: currentTimeInMinutes + processingDuration
+        };
+        
+        timeline.push(entry);
+        currentTimeInMinutes = entry.endTime;
+    });
+    
+    const fullTimeline = [...timeline];
+    events.forEach(event => {
+        fullTimeline.push({
+            type: event.type,
+            startTime: event.startTimeInMinutes,
+            endTime: event.startTimeInMinutes + event.duration,
+            duration: event.duration,
+            id: event.id
+        });
+    });
+
+    fullTimeline.sort((a, b) => a.startTime - b.startTime);
+
+    // Recalculate times with events
+    let adjustedCurrentTime = (startH * 60 + startM) + totalDelayInMinutes;
+    let totalProcessingDuration = 0;
+    const finalTimeline = [];
+
+    for (const item of fullTimeline) {
+        let itemDuration;
+        if (item.type === 'flock') {
+            itemDuration = (item.count / lineSpeed) * 60;
+        } else {
+            itemDuration = item.duration;
+        }
+        
+        finalTimeline.push({
+            ...item,
+            startTime: adjustedCurrentTime,
+            endTime: adjustedCurrentTime + itemDuration,
+        });
+        adjustedCurrentTime += itemDuration;
+        totalProcessingDuration += itemDuration;
+    }
+    
+    const totalTime = totalProcessingDuration;
+
+    return { timeline: finalTimeline, totals: { totalChickens, totalWeight, totalTime } };
 }
