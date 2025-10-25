@@ -1,0 +1,21 @@
+<div id="estimate-modal" class="modal">
+    <div class="modal-content" style="max-width: 95vw; height: 90vh; display: flex; flex-direction: column;">
+        <div class="modal-header">
+            <div style="display: flex; align-items: center; gap: 24px;">
+                <h2 class="modal-title">Vytvořit / Upravit odhad spotřeby</h2>
+                <div class="form-group" style="margin-bottom: 0; display: flex; align-items: center; gap: 8px;">
+                    <label for="estimate-month" style="margin-bottom: 0; white-space: nowrap;">Odhad pro měsíc</label>
+                    <input type="month" id="estimate-month">
+                </div>
+            </div>
+            <button class="btn-icon" data-action="close-modal"><i data-feather="x"></i></button>
+        </div>
+        <div class="modal-body" id="estimate-modal-body">
+            <!-- JS will render customer accordions here -->
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" data-action="close-modal">Zavřít</button>
+            <button class="btn btn-primary" data-action="save-estimate"><i data-feather="save"></i>Uložit odhad</button>
+        </div>
+    </div>
+</div>

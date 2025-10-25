@@ -5,6 +5,7 @@
 // @ts-nocheck
 import { appState, saveState } from '../state.ts';
 import { getDailyNeeds } from '../services/calculations.ts';
+import { handleThighSplitProduction } from '../services/production.ts';
 
 export function renderDailyPlan() {
     const todayNeeds = getDailyNeeds(appState.ui.selectedDate, 'non-kfc');
@@ -56,10 +57,20 @@ export function renderDailyPlan() {
         input.addEventListener('change', e => {
             const surovinaId = e.target.dataset.surovinaId;
             const date = appState.ui.selectedDate;
+
             if (!appState.dailyStockAdjustments[date]) {
                 appState.dailyStockAdjustments[date] = {};
             }
-            appState.dailyStockAdjustments[date][surovinaId] = parseFloat(e.target.value) || 0;
+            const oldValue = appState.dailyStockAdjustments[date][surovinaId] || 0;
+            const newValue = parseFloat(e.target.value) || 0;
+
+            appState.dailyStockAdjustments[date][surovinaId] = newValue;
+
+            if (newValue > oldValue) {
+                const addedBoxes = newValue - oldValue;
+                handleThighSplitProduction(surovinaId, addedBoxes, date);
+            }
+
             saveState();
             renderDailyPlan();
         });

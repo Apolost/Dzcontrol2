@@ -10,8 +10,8 @@ import { generateId } from '../utils.ts';
 import { renderMainPage } from './mainPage.ts';
 
 function updateSpizyTotals() {
-    const totalSpek = (parseFloat(document.getElementById('spizy-config-spek-spek').value) || 0) + (parseFloat(document.getElementById('spizy-config-spek-klobasa').value) || 0) + (parseFloat(document.getElementById('spizy-config-spek-cibule').value) || 0) + (parseFloat(document.getElementById('spizy-config-spek-steak').value) || 0);
-    const totalKlobasa = (parseFloat(document.getElementById('spizy-config-klobasa-steak').value) || 0) + (parseFloat(document.getElementById('spizy-config-klobasa-klobasa').value) || 0) + (parseFloat(document.getElementById('spizy-config-klobasa-cibule').value) || 0);
+    const totalSpek = (parseFloat(document.getElementById('spizy-config-spek-spek').value) || 0) + (parseFloat(document.getElementById('spizy-config-spek-klobasa').value) || 0) + (parseFloat(document.getElementById('spizy-config-spek-cibule').value) || 0) + (parseFloat(document.getElementById('spizy-config-spek-steak').value) || 0) + (parseFloat(document.getElementById('spizy-config-spek-paprika').value) || 0);
+    const totalKlobasa = (parseFloat(document.getElementById('spizy-config-klobasa-steak').value) || 0) + (parseFloat(document.getElementById('spizy-config-klobasa-klobasa').value) || 0) + (parseFloat(document.getElementById('spizy-config-klobasa-cibule').value) || 0) + (parseFloat(document.getElementById('spizy-config-klobasa-paprika').value) || 0);
 
     const totalSpekEl = document.getElementById('spizy-total-spek');
     totalSpekEl.textContent = totalSpek;
@@ -32,16 +32,18 @@ export function renderSpizySettings() {
     document.getElementById('spizy-config-spek-klobasa').value = spek.klobasa;
     document.getElementById('spizy-config-spek-cibule').value = spek.cibule;
     document.getElementById('spizy-config-spek-steak').value = spek.steak;
+    document.getElementById('spizy-config-spek-paprika').value = spek.paprika;
     document.getElementById('spizy-config-klobasa-steak').value = klobasa.steak;
     document.getElementById('spizy-config-klobasa-klobasa').value = klobasa.klobasa;
     document.getElementById('spizy-config-klobasa-cibule').value = klobasa.cibule;
+    document.getElementById('spizy-config-klobasa-paprika').value = klobasa.paprika;
     
     updateSpizyTotals();
 }
 
 export function saveSpizySettings() {
-    const totalSpek = (parseFloat(document.getElementById('spizy-config-spek-spek').value) || 0) + (parseFloat(document.getElementById('spizy-config-spek-klobasa').value) || 0) + (parseFloat(document.getElementById('spizy-config-spek-cibule').value) || 0) + (parseFloat(document.getElementById('spizy-config-spek-steak').value) || 0);
-    const totalKlobasa = (parseFloat(document.getElementById('spizy-config-klobasa-steak').value) || 0) + (parseFloat(document.getElementById('spizy-config-klobasa-klobasa').value) || 0) + (parseFloat(document.getElementById('spizy-config-klobasa-cibule').value) || 0);
+    const totalSpek = (parseFloat(document.getElementById('spizy-config-spek-spek').value) || 0) + (parseFloat(document.getElementById('spizy-config-spek-klobasa').value) || 0) + (parseFloat(document.getElementById('spizy-config-spek-cibule').value) || 0) + (parseFloat(document.getElementById('spizy-config-spek-steak').value) || 0) + (parseFloat(document.getElementById('spizy-config-spek-paprika').value) || 0);
+    const totalKlobasa = (parseFloat(document.getElementById('spizy-config-klobasa-steak').value) || 0) + (parseFloat(document.getElementById('spizy-config-klobasa-klobasa').value) || 0) + (parseFloat(document.getElementById('spizy-config-klobasa-cibule').value) || 0) + (parseFloat(document.getElementById('spizy-config-klobasa-paprika').value) || 0);
 
     if (Math.abs(totalSpek - 100) > 0.1 || Math.abs(totalKlobasa - 100) > 0.1) {
         showToast('Složení pro Špíz Špek i Špíz Klobása musí být dohromady 100 %.', 'error');
@@ -52,9 +54,11 @@ export function saveSpizySettings() {
     appState.spizyConfig.spek.klobasa = parseFloat(document.getElementById('spizy-config-spek-klobasa').value) || 0;
     appState.spizyConfig.spek.cibule = parseFloat(document.getElementById('spizy-config-spek-cibule').value) || 0;
     appState.spizyConfig.spek.steak = parseFloat(document.getElementById('spizy-config-spek-steak').value) || 0;
+    appState.spizyConfig.spek.paprika = parseFloat(document.getElementById('spizy-config-spek-paprika').value) || 0;
     appState.spizyConfig.klobasa.steak = parseFloat(document.getElementById('spizy-config-klobasa-steak').value) || 0;
     appState.spizyConfig.klobasa.klobasa = parseFloat(document.getElementById('spizy-config-klobasa-klobasa').value) || 0;
     appState.spizyConfig.klobasa.cibule = parseFloat(document.getElementById('spizy-config-klobasa-cibule').value) || 0;
+    appState.spizyConfig.klobasa.paprika = parseFloat(document.getElementById('spizy-config-klobasa-paprika').value) || 0;
     saveState();
     showToast('Nastavení špízů uloženo.');
 }
@@ -111,6 +115,7 @@ function renderSpizyModalContent() {
                     <tr><td>Špek</td><td>${needs.spek.toFixed(2)}</td><td>${appState.spizyStock.spek.toFixed(2)}</td><td class="${(appState.spizyStock.spek - needs.spek) < 0 ? 'shortage' : 'surplus'}">${(appState.spizyStock.spek - needs.spek).toFixed(2)}</td></tr>
                     <tr><td>Steak (na Špíz)</td><td>${needs.steak.toFixed(2)}</td><td>${appState.spizyStock.steak.toFixed(2)}</td><td class="${(appState.spizyStock.steak - needs.steak) < 0 ? 'shortage' : 'surplus'}">${(appState.spizyStock.steak - needs.steak).toFixed(2)}</td></tr>
                     <tr><td>Cibule</td><td>${needs.cibule.toFixed(2)}</td><td>${appState.spizyStock.cibule.toFixed(2)}</td><td class="${(appState.spizyStock.cibule - needs.cibule) < 0 ? 'shortage' : 'surplus'}">${(appState.spizyStock.cibule - needs.cibule).toFixed(2)}</td></tr>
+                    <tr><td>Paprika</td><td>${needs.paprika.toFixed(2)}</td><td>${appState.spizyStock.paprika.toFixed(2)}</td><td class="${(appState.spizyStock.paprika - needs.paprika) < 0 ? 'shortage' : 'surplus'}">${(appState.spizyStock.paprika - needs.paprika).toFixed(2)}</td></tr>
                     <tr><td>Řízky (na Čilli)</td><td>${needs.rizky.toFixed(2)}</td><td colspan="2">Řídí se hlavním skladem</td></tr>
                  </tbody>
                 </table>

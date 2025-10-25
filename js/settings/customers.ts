@@ -14,6 +14,7 @@ export function renderCustomers() {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${customer.name}</td>
+            <td><input type="number" class="customer-stabilized-amount" data-id="${customer.id}" value="${customer.stabilizedAmount || 0}" style="width: 100px;"></td>
             <td class="actions">
                 <button class="btn-icon" data-action="edit-customer" data-id="${customer.id}">${ICONS.edit}</button>
                 <button class="btn-icon danger" data-action="delete-customer" data-id="${customer.id}">${ICONS.trash}</button>
@@ -48,6 +49,19 @@ export function cancelEditCustomer() {
     feather.replace();
 }
 
+export function saveAllCustomers() {
+    document.querySelectorAll('.customer-stabilized-amount').forEach(input => {
+        const customer = appState.zakaznici.find(c => c.id === input.dataset.id);
+        if (customer) {
+            customer.stabilizedAmount = parseFloat(input.value) || 0;
+        }
+    });
+    saveState();
+    showToast('Změny u zákazníků uloženy');
+    renderCustomers();
+}
+
+
 export function saveCustomer() {
     const nameInput = document.getElementById('customer-name');
     const name = nameInput.value.trim();
@@ -71,7 +85,7 @@ export function saveCustomer() {
         }
     } else {
         const newCustomerId = generateId();
-        appState.zakaznici.push({ id: newCustomerId, name });
+        appState.zakaznici.push({ id: newCustomerId, name, stabilizedAmount: 0 });
         // Initialize boxWeights for the new customer
         appState.boxWeights[newCustomerId] = {};
         appState.suroviny.forEach(s => {

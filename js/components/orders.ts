@@ -17,7 +17,12 @@ export function renderOrders() {
         if(appState.ui.openAccordionId === customer.id) {
             details.open = true;
         }
-        details.innerHTML = `<summary>${customer.name}<i data-feather="chevron-right" class="arrow-icon"></i></summary><div class="details-content"></div>`;
+
+        const order = appState.orders.find(o => o.customerId === customer.id && o.date === appState.ui.selectedDate);
+        const activeItemsCount = order ? order.items.filter(item => item.isActive).length : 0;
+        const badgeHTML = activeItemsCount > 0 ? `<span class="order-badge">${activeItemsCount}</span>` : `<span class="order-badge"></span>`;
+
+        details.innerHTML = `<summary>${customer.name}${badgeHTML}<i data-feather="chevron-right" class="arrow-icon"></i></summary><div class="details-content"></div>`;
         const content = details.querySelector('.details-content');
         
         const orderTypes = [
@@ -27,8 +32,6 @@ export function renderOrders() {
         ];
 
         let contentHTML = '<div class="order-types-container">';
-
-        const order = appState.orders.find(o => o.customerId === customer.id && o.date === appState.ui.selectedDate);
 
         orderTypes.forEach(typeInfo => {
             contentHTML += `
@@ -251,7 +254,7 @@ export function saveAddedItems() {
             if (existingItem) {
                 existingItem.boxCount += boxCount;
             } else {
-                order.items.push({ id: generateId(), surovinaId, boxCount, isActive: true, type: orderType });
+                order.items.push({ id: generateId(), surovinaId, boxCount, isActive: true, type: orderType, doneCount: 0 });
             }
         }
     });
@@ -398,7 +401,7 @@ export function saveMainOrder() {
             if (existingItem) {
                 existingItem.boxCount += boxCount;
             } else {
-                order.items.push({ id: generateId(), surovinaId, boxCount, isActive: true, type: orderType });
+                order.items.push({ id: generateId(), surovinaId, boxCount, isActive: true, type: orderType, doneCount: 0 });
             }
         }
     });
@@ -438,4 +441,67 @@ export function saveMixRatio() {
     saveState();
     DOMElements.mixRatioModal.classList.remove('active');
     showToast('Poměr pro objednávku upraven');
+}
+
+export function exportOrdersToPdf() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const date = appState.ui.selectedDate;
+    const formattedDate = new Date(date).toLocaleDateString('cs-CZ');
+
+    doc.setFontSize(18);
+    doc.text(`Souhrn objednavek - ${formattedDate}`, 14, 22);
+
+    const ordersForDay = appState.orders.filter(o => o.date === date && o.items.length > 0);
+    
+    if (ordersForDay.length === 0) {
+        doc.setFontSize(12);
+        doc.text("Pro tento den neexistuji zadne objednavky.", 14, 32);
+        doc.save(`Objednavky_${date}.pdf`);
+        return;
+    }
+
+    const orderTypes = [
+        { key: 'OA', title: 'Male misky (OA)' },
+        { key: 'RB', title: 'Rodinne baleni (RB)' },
+        { key: 'VL', title: 'Volne lozene (VL)' },
+    ];
+    
+    let finalY = 30;
+
+    ordersForDay.forEach(order => {
+        const customer = appState.zakaznici.find(c => c.id === order.customerId);
+        if (!customer) return;
+
+        doc.setFontSize(14);
+        doc.text(`Zakaznik: ${customer.name}`, 14, finalY);
+        finalY += 8;
+
+        orderTypes.forEach(typeInfo => {
+            const items = order.items.filter(item => item.type === typeInfo.key && item.isActive);
+            if (items.length === 0) return;
+
+            const head = [['Produkt', 'Pocet beden']];
+            const body = items.map(item => {
+                const surovina = appState.suroviny.find(s => s.id === item.surovinaId);
+                return [surovina ? surovina.name : 'Neznamy', item.boxCount];
+            });
+
+            doc.autoTable({
+                startY: finalY,
+                head: head,
+                body: body,
+                didDrawPage: (data) => {
+                    doc.setFontSize(12);
+                    doc.text(typeInfo.title, 14, data.cursor.y - 10);
+                },
+                styles: { font: 'Helvetica' } // Basic font, might not support all Czech characters
+            });
+
+            finalY = doc.autoTable.previous.finalY + 10;
+        });
+    });
+
+    doc.save(`Objednavky_${date}.pdf`);
+    showToast('PDF se souhrnem objednávek bylo vygenerováno.');
 }

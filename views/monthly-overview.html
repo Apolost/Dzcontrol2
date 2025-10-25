@@ -1,0 +1,35 @@
+<div id="view-monthly-overview">
+    <div class="page-header-container">
+        <h1 class="page-header" style="margin-bottom: 0;">Měsíční přehled</h1>
+        <div>
+            <button class="btn btn-primary" id="open-estimate-modal-btn" data-action="open-estimate-modal"><i data-feather="edit"></i> Upravit odhad</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title" id="monthly-overview-title">Přehled</h2>
+             <div id="monthly-overview-controls" class="btn-group">
+                  <button class="btn btn-secondary" data-action="set-monthly-range" data-range="day">Den</button>
+                  <button class="btn btn-secondary" data-action="set-monthly-range" data-range="week">Týden</button>
+                  <button class="btn btn-secondary active" data-action="set-monthly-range" data-range="this-month">Tento měsíc</button>
+                  <button class="btn btn-secondary" data-action="set-monthly-range" data-range="last-month">Minulý měsíc</button>
+                  <!-- Custom range can be added later -->
+              </div>
+        </div>
+        <div class="card-content">
+             <div style="height: 400px; margin-top: 20px;">
+                <canvas id="monthly-overview-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Porovnání s odhadem</h2>
+        </div>
+        <div class="card-content" id="monthly-estimate-comparison">
+            <!-- JS will render comparison table here -->
+        </div>
+    </div>
+</div>

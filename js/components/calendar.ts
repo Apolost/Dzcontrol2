@@ -131,7 +131,8 @@ function renderDailyCountsForPlanning() {
 
     while(currentDate <= endDate) {
         const dateStr = currentDate.toISOString().split('T')[0];
-        const count = dailyCounts[dateStr] || 0;
+        const countData = dailyCounts[dateStr];
+        const count = (typeof countData === 'object' ? countData.boxCount : countData) || 0;
         const dayLabel = currentDate.toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric' });
         planActionDailyCounts.innerHTML += `
             <div class="form-row">
@@ -144,26 +145,44 @@ function renderDailyCountsForPlanning() {
 }
 
 export function openDayDetailsModal(date) {
+    // Filter for actions that are active on this day AND have boxes planned for this day.
+    const relevantActions = appState.plannedActions.filter(a => {
+        const dateIsInRange = date >= a.startDate && (!a.endDate || date <= a.endDate);
+        if (!dateIsInRange) return false;
+
+        const dayCountData = a.dailyCounts?.[date];
+        const boxCount = (typeof dayCountData === 'object' ? dayCountData.boxCount : dayCountData) || 0;
+        return boxCount > 0;
+    });
+
+    // If there is exactly one relevant action, open the edit modal directly.
+    if (relevantActions.length === 1) {
+        openPlanActionModal(relevantActions[0].id);
+        return;
+    }
+
+    // --- Original Logic for 0 or 2+ actions ---
     const modal = DOMElements.dayDetailsModal;
     modal.querySelector('.modal-title').textContent = new Date(date + 'T00:00:00').toLocaleDateString('cs-CZ', { weekday: 'long', day: 'numeric', month: 'long' });
     const body = modal.querySelector('.modal-body');
     body.innerHTML = '';
     
-    const dayActions = appState.plannedActions.filter(a => date >= a.startDate && (!a.endDate || date <= a.endDate));
     const dayOrders = appState.orders.filter(o => o.date === date);
 
-    if (dayActions.length === 0 && dayOrders.length === 0) {
+    if (relevantActions.length === 0 && dayOrders.length === 0) {
         body.innerHTML = '<p>Žádné události pro tento den.</p>';
     } else {
-        if (dayActions.length > 0) {
+        if (relevantActions.length > 0) { // Will be > 1 here
             body.innerHTML += '<h3>Naplánované akce</h3>';
-            dayActions.forEach(action => {
+            relevantActions.forEach(action => {
                 const customer = appState.zakaznici.find(c => c.id === action.customerId);
                 const product = appState.suroviny.find(s => s.id === action.surovinaId);
-                const dayCounts = action.dailyCounts || {};
+                const dayCountData = action.dailyCounts?.[date];
+                const boxCount = (typeof dayCountData === 'object' ? dayCountData.boxCount : dayCountData) || 0;
+                
                 body.innerHTML += `
                     <div class="card" style="padding: 10px; margin-bottom: 10px;">
-                        <strong>${product?.name || '?'}</strong> pro ${customer?.name || '?'} (${dayCounts[date] || 0} beden)
+                        <strong>${product?.name || '?'}</strong> pro ${customer?.name || '?'} (${boxCount} beden)
                         <div class="actions" style="float: right;">
                             <button class="btn-icon" data-action="edit-action" data-id="${action.id}">${ICONS.edit}</button>
                             <button class="btn-icon danger" data-action="delete-action" data-id="${action.id}">${ICONS.trash}</button>
@@ -177,6 +196,7 @@ export function openDayDetailsModal(date) {
          }
     }
     modal.classList.add('active');
+    feather.replace();
 }
 
 export function savePlannedAction() {
@@ -185,12 +205,18 @@ export function savePlannedAction() {
     const planActionProduct = modal.querySelector('#plan-action-product');
     const planActionFrom = modal.querySelector('#plan-action-from');
     const planActionTo = modal.querySelector('#plan-action-to');
+    const action = appState.ui.editingActionId ? appState.plannedActions.find(a => a.id === appState.ui.editingActionId) : null;
 
     const dailyCounts = {};
     modal.querySelectorAll('.plan-day-count').forEach(input => {
         const count = parseInt(input.value);
         if (count > 0) {
-            dailyCounts[input.dataset.date] = count;
+            const date = input.dataset.date;
+            const existingProduced = action?.dailyCounts?.[date]?.producedCount || 0;
+            dailyCounts[date] = {
+                boxCount: count,
+                producedCount: existingProduced
+            };
         }
     });
 
@@ -200,7 +226,6 @@ export function savePlannedAction() {
     }
 
     if (appState.ui.editingActionId) {
-        const action = appState.plannedActions.find(a => a.id === appState.ui.editingActionId);
         action.customerId = planActionCustomer.value;
         action.surovinaId = planActionProduct.value;
         action.startDate = planActionFrom.value;
@@ -232,4 +257,124 @@ export function deletePlannedAction(actionId) {
         renderCalendar();
         showToast('Akce smazána', 'success');
     });
+}
+
+const monthNames = ["Leden", "Únor", "Březen", "Duben", "Květen", "Červen", "Červenec", "Srpen", "Září", "Říjen", "Listopad", "Prosinec"];
+
+function renderExportMonths() {
+    const listEl = DOMElements.exportActionsModal.querySelector('#export-months-list');
+    listEl.innerHTML = '';
+    appState.ui.exportMonths.forEach(({ year, month }) => {
+        const monthName = monthNames[month];
+        const item = document.createElement('div');
+        item.className = 'card';
+        item.style.padding = '10px';
+        item.style.marginBottom = '0';
+        item.textContent = `${monthName} ${year}`;
+        listEl.appendChild(item);
+    });
+}
+
+export function openExportActionsModal() {
+    const { year, month } = appState.ui.calendar;
+    appState.ui.exportMonths = [{ year, month }];
+    renderExportMonths();
+    DOMElements.exportActionsModal.classList.add('active');
+    feather.replace();
+}
+
+export function addMonthToExport() {
+    const lastMonth = appState.ui.exportMonths[appState.ui.exportMonths.length - 1];
+    let { year, month } = lastMonth;
+
+    month += 1;
+    if (month > 11) {
+        month = 0;
+        year += 1;
+    }
+    appState.ui.exportMonths.push({ year, month });
+    renderExportMonths();
+}
+
+export function exportActionsToPdf() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const allActionsToExport = [];
+
+    appState.ui.exportMonths.forEach(({ year, month }) => {
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0);
+
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+            const dateStr = d.toISOString().split('T')[0];
+            const actionsForDay = appState.plannedActions.filter(a => {
+                const dayCountData = a.dailyCounts?.[dateStr];
+                const boxCount = (typeof dayCountData === 'object' ? dayCountData.boxCount : dayCountData) || 0;
+                return boxCount > 0 && dateStr >= a.startDate && (!a.endDate || dateStr <= a.endDate);
+            });
+
+            actionsForDay.forEach(action => {
+                const customer = appState.zakaznici.find(c => c.id === action.customerId);
+                const surovina = appState.suroviny.find(s => s.id === action.surovinaId);
+                if (!customer || !surovina) return;
+                
+                const dayCountData = action.dailyCounts[dateStr];
+                const boxCount = (typeof dayCountData === 'object' ? dayCountData.boxCount : dayCountData) || 0;
+                
+                const boxWeightInGrams = appState.boxWeights[customer.id]?.[surovina.id]?.VL || surovina.boxWeight * 1000 || 10000;
+                const neededKg = boxCount * (boxWeightInGrams / 1000);
+                
+                const paletteWeight = surovina.paletteWeight;
+                const neededPallets = paletteWeight > 0 ? (neededKg / paletteWeight) : 0;
+
+                allActionsToExport.push({
+                    date: dateStr,
+                    customerName: customer.name,
+                    surovinaName: surovina.name,
+                    boxCount: boxCount,
+                    neededKg: neededKg,
+                    neededPallets: neededPallets
+                });
+            });
+        }
+    });
+
+    if (allActionsToExport.length === 0) {
+        showToast('Nebyly nalezeny žádné akce pro vybrané měsíce.', 'error');
+        return;
+    }
+
+    // Sort by date
+    allActionsToExport.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    doc.setFontSize(18);
+    doc.text(`Export Naplánovaných Akcí`, 14, 22);
+
+    const head = [['Datum', 'Zákazník', 'Surovina', 'Typ balení', 'Počet beden', 'Potřeba (kg)', 'Potřeba (palet)']];
+    const body = allActionsToExport.map(action => [
+        new Date(action.date).toLocaleDateString('cs-CZ'),
+        action.customerName,
+        action.surovinaName,
+        'VL', // Planned actions are always VL
+        action.boxCount,
+        action.neededKg.toFixed(2),
+        action.neededPallets.toFixed(2)
+    ]);
+
+    doc.autoTable({
+        startY: 30,
+        head: head,
+        body: body,
+        styles: { font: 'Helvetica' },
+        columnStyles: {
+            4: { halign: 'right' },
+            5: { halign: 'right' },
+            6: { halign: 'right' },
+        }
+    });
+    
+    const monthNamesString = appState.ui.exportMonths.map(({year, month}) => `${monthNames[month]}_${year}`).join('-');
+    doc.save(`Export_akci_${monthNamesString}.pdf`);
+    showToast('PDF s exportem akcí bylo vygenerováno.');
+    DOMElements.exportActionsModal.classList.remove('active');
 }

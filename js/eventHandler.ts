@@ -5,7 +5,8 @@
 // @ts-nocheck
 
 import { appState, saveState, saveDataToFile, loadDataFromFile } from './state.ts';
-import { changeDate } from './main.ts';
+import { changeDate, render } from './main.ts';
+import { DOMElements } from './ui.ts';
 
 // Import handlers from all component/settings modules
 import * as mainPage from './components/mainPage.ts';
@@ -16,11 +17,17 @@ import * as changes from './components/changes.ts';
 import * as spizy from './components/spizy.ts';
 import * as modals from './components/modals.ts';
 import * as calculator from './components/calculator.ts';
+import * as productionOverview from './components/productionOverview.ts';
+import * as rawMaterialOrders from './components/rawMaterialOrders.ts';
+import * as qrCode from './components/qrCode.ts';
 import * as products from './settings/products.ts';
 import * as mixes from './settings/mixes.ts';
 import * as boxWeights from './settings/boxWeights.ts';
 import * as paletteWeights from './settings/paletteWeights.ts';
 import * as customers from './settings/customers.ts';
+import * as lineSettings from './settings/lineSettings.ts';
+import * as exportData from './components/export.ts';
+import * as monthlyOverview from './components/monthlyOverview.ts';
 
 
 export function bindGlobalEvents() {
@@ -31,6 +38,26 @@ export function bindGlobalEvents() {
 
 function handleGlobalClick(e) {
     const actionTarget = e.target.closest('[data-action]');
+    const navLink = e.target.closest('.nav-link');
+    const menuToggle = e.target.closest('#menu-toggle');
+    const navOverlay = e.target.closest('#nav-overlay');
+
+    // --- Navigation ---
+    if (menuToggle) {
+        document.getElementById('app-nav').classList.toggle('open');
+        document.getElementById('nav-overlay').classList.toggle('active');
+    } else if (navOverlay || navLink) {
+        document.getElementById('app-nav').classList.remove('open');
+        document.getElementById('nav-overlay').classList.remove('active');
+    }
+
+    // --- View Switching from Nav ---
+    if (navLink && navLink.dataset.view) {
+        e.preventDefault();
+        appState.ui.activeView = navLink.dataset.view;
+        render();
+    }
+
     if (!actionTarget) return;
 
     const { action, id } = actionTarget.dataset;
@@ -47,11 +74,54 @@ function handleGlobalClick(e) {
 
         // Main Page
         case 'quick-entry-done': mainPage.toggleQuickEntryDone(id); break;
-        case 'toggle-spizy-done': mainPage.toggleSpizyDone(actionTarget.dataset.orderId, actionTarget.dataset.type); break;
-        case 'toggle-main-page-order-item-done': mainPage.toggleMainPageOrderItemDone(actionTarget.dataset.orderId, actionTarget.dataset.itemId); break;
+        case 'toggle-spizy-done': mainPage.toggleSpizyDone(actionTarget); break;
+        case 'toggle-main-page-order-item-done': mainPage.toggleMainPageOrderItemDone(actionTarget); break;
         case 'delete-main-page-order-item': mainPage.deleteOrderItemFromMainPage(actionTarget.dataset.orderId, actionTarget.dataset.itemId); break;
+        case 'open-pre-production-modal': mainPage.openPreProductionModal(); break;
+        case 'produce-from-plan': mainPage.produceFromPlan(actionTarget); break;
+        case 'set-pre-production-days': mainPage.setPreProductionDays(actionTarget); break;
+        case 'open-temp-weight-modal': mainPage.openTempWeightModal(actionTarget); break;
+        case 'apply-suggested-weight': mainPage.applySuggestedWeight(actionTarget); break;
+        case 'save-temp-weights': mainPage.saveTempWeights(actionTarget); break;
+        case 'open-surovina-shortage-modal': mainPage.openSurovinaShortageModal(actionTarget.dataset.surovinaId); break;
+        case 'mark-shortage-item-done': mainPage.markShortageItemDone(actionTarget.dataset.orderId, actionTarget.dataset.itemId); break;
+        case 'open-shorten-order-modal': mainPage.openShortenOrderModal(actionTarget.dataset.orderId, actionTarget.dataset.itemId); break;
+        case 'save-shortened-order': mainPage.saveShortenedOrder(); break;
+        case 'open-single-stock-adjustment': mainPage.openSingleStockAdjustmentModal(actionTarget.dataset.surovinaId); break;
+        case 'save-single-stock-adjustment': mainPage.saveSingleStockAdjustment(); break;
+        case 'open-add-pre-production-modal': 
+            mainPage.openAddPreProductionModal();
+            DOMElements.preProductionModal.classList.remove('active');
+            break;
+        case 'save-direct-pre-production': mainPage.saveDirectPreProduction(); break;
+        case 'mark-pre-production-done': mainPage.markPreProductionDone(actionTarget); break;
+
+
+        // Production Overview
+        case 'export-production-pdf': productionOverview.exportProductionOverviewToPdf(); break;
+        case 'open-chicken-count-modal': productionOverview.openChickenCountModal(); break;
+        case 'add-chicken-flock': productionOverview.addChickenFlockRow(); break;
+        case 'delete-chicken-flock': productionOverview.deleteChickenFlockRow(actionTarget); break;
+        case 'save-chicken-count': productionOverview.saveChickenCount(); break;
+        case 'open-pause-modal': productionOverview.openPauseModal(); break;
+        case 'save-pause': productionOverview.savePause(); break;
+        case 'open-breakdown-modal': productionOverview.openBreakdownModal(); break;
+        case 'save-breakdown': productionOverview.saveBreakdown(); break;
+        case 'delete-production-event': productionOverview.deleteProductionEvent(id); break;
+        case 'delete-production-flock': productionOverview.deleteProductionFlock(actionTarget.dataset.index); break;
+        case 'open-batch-reduction-modal': productionOverview.openBatchReductionModal(); break;
+        case 'save-batch-reduction': productionOverview.saveBatchReduction(); break;
+        case 'set-rizky-overview-range': productionOverview.renderRizkyOverview(actionTarget.dataset.range); break;
+        case 'open-surovina-overview-modal': productionOverview.openSurovinaOverviewModal(); break;
+        case 'transfer-stock-to-tomorrow': productionOverview.transferStockToTomorrow(); break;
+
+        // Monthly Overview
+        case 'set-monthly-range': monthlyOverview.setRange(actionTarget); break;
+        case 'open-estimate-modal': monthlyOverview.openEstimateModal(); break;
+        case 'save-estimate': monthlyOverview.saveEstimate(); break;
 
         // Orders
+        case 'export-orders-pdf': orders.exportOrdersToPdf(); break;
         case 'add-order-items': orders.openAddOrderModal(id, actionTarget.dataset.orderType); break;
         case 'delete-order-item': orders.deleteOrderItem(actionTarget.dataset.orderId, actionTarget.dataset.itemId); break;
         case 'edit-mix-ratio': orders.openMixRatioModal(actionTarget.dataset.orderId, actionTarget.dataset.itemId); break;
@@ -70,6 +140,9 @@ function handleGlobalClick(e) {
         case 'edit-action': calendar.openPlanActionModal(id); break;
         case 'delete-action': calendar.deletePlannedAction(id); break;
         case 'save-planned-action': calendar.savePlannedAction(); break;
+        case 'open-export-actions-modal': calendar.openExportActionsModal(); break;
+        case 'add-month-to-export': calendar.addMonthToExport(); break;
+        case 'export-actions-to-pdf': calendar.exportActionsToPdf(); break;
         
         // Changes
         case 'add-change': changes.openAddChangeModal(); break;
@@ -78,15 +151,34 @@ function handleGlobalClick(e) {
         case 'save-change': changes.saveChange(); break;
 
         // Calculator
+        case 'export-calculator-pdf': calculator.exportCalculatorToPdf(); break;
         case 'open-calculator-add-item-modal': calculator.openAddItemModal(); break;
         case 'save-calculator-item': calculator.saveItem(); break;
         case 'delete-calculator-item': calculator.deleteItem(id); break;
+
+        // Raw Material Orders & New Exports
+        case 'export-raw-material-orders-pdf': rawMaterialOrders.exportRawMaterialOrdersToPdf(); break;
+        case 'export-raw-materials-report': exportData.exportRawMaterialsReport(); break;
+        case 'export-schnitzel-report': exportData.exportSchnitzelReport(); break;
+        case 'export-kfc-report': exportData.exportKfcReport(); break;
+
+        // QR Code
+        case 'generate-qr-code': qrCode.handleGenerateQrCode(); break;
+        case 'start-qr-scan': qrCode.handleStartQrScan(); break;
+        case 'stop-qr-scan': qrCode.handleStopQrScan(); break;
+        case 'scan-for-removal': qrCode.handleScanForRemoval(); break;
+        case 'start-add-to-stock': qrCode.handleStartAddToStock(); break;
+        case 'select-surovina-for-qr': qrCode.handleSelectSurovinaForQr(actionTarget.dataset.surovinaId, actionTarget.dataset.surovinaName); break;
+        case 'show-qr-code': qrCode.handleShowQrCode(id); break;
+        case 'delete-qr-code': qrCode.handleDeleteQrCode(id); break;
+        case 'print-qr-code': qrCode.handlePrintQrCode(id, actionTarget.dataset.surovinaName); break;
 
         // Settings -> Customers
         case 'save-customer': customers.saveCustomer(); break;
         case 'edit-customer': customers.openCustomerEditor(id); break;
         case 'delete-customer': customers.deleteCustomer(id); break;
         case 'cancel-edit-customer': customers.cancelEditCustomer(); break;
+        case 'save-all-customers': customers.saveAllCustomers(); break;
 
         // Settings -> Products
         case 'edit-product': products.openProductEditor(id); break;
@@ -110,6 +202,18 @@ function handleGlobalClick(e) {
 
         // Settings -> Palette Weights
         case 'save-all-palette-weights': paletteWeights.saveAllPaletteWeights(); break;
+
+        // Settings -> Line Settings
+        case 'save-line-settings': lineSettings.saveLineSettings(); break;
+        case 'open-calibration-source-modal': lineSettings.openCalibrationSourceModal(); break;
+        case 'open-calibration-setup-modal': lineSettings.openCalibrationSetupModal(actionTarget.dataset.type); break;
+        case 'save-calibration-settings': lineSettings.saveCalibrationSettings(); break;
+        case 'open-yield-settings-modal': lineSettings.openYieldSettingsModal(); break;
+        case 'save-yield-settings': lineSettings.saveYieldSettings(); break;
+        case 'open-thigh-split-settings-modal': lineSettings.openThighSplitSettingsModal(); break;
+        case 'save-thigh-split-settings': lineSettings.saveThighSplitSettings(); break;
+        case 'open-portioning-settings-modal': lineSettings.openPortioningSettingsModal(); break;
+        case 'save-portioning-settings': lineSettings.savePortioningSettings(); break;
         
         // KFC
         case 'open-kfc-add-order': kfc.openKfcAddOrderModal(); break;
@@ -121,7 +225,10 @@ function handleGlobalClick(e) {
         case 'save-kfc-staff': kfc.saveKfcStaff(); break;
 
         // Spizy
-        case 'open-spizy-modal': spizy.openSpizyModal(); break;
+        case 'open-spizy-modal':
+            spizy.openSpizyModal();
+            DOMElements.productionActionsModal.classList.remove('active');
+            break;
         case 'open-spizy-add-order-modal': spizy.openSpizyAddOrderModal(); break;
         case 'edit-spizy-order': spizy.openSpizyAddOrderModal(id); break;
         case 'delete-spizy-order': spizy.deleteSpizyOrder(id); break;
@@ -135,13 +242,47 @@ function handleGlobalClick(e) {
         case 'save-spizy-ingredient-order': spizy.saveSpizyIngredientOrder(); break;
         
         // Standalone Modals
-        case 'open-maykawa-modal': modals.openMaykawaModal(); break;
-        case 'open-rizky-modal': modals.openRizkyModal(); break;
+        case 'open-production-modal': modals.openProductionModal(); break;
+        case 'open-maykawa-modal':
+            modals.openMaykawaModal();
+            DOMElements.productionActionsModal.classList.remove('active');
+            break;
+        case 'open-rizky-modal':
+            modals.openRizkyModal();
+            DOMElements.productionActionsModal.classList.remove('active');
+            break;
+        case 'open-minced-meat-modal':
+            modals.openMincedMeatModal();
+            DOMElements.productionActionsModal.classList.remove('active');
+            break;
+        case 'open-add-minced-meat-order-modal': modals.openAddMincedMeatOrderModal(); break;
+        case 'save-minced-meat-order': modals.saveMincedMeatOrder(); break;
+        case 'delete-minced-meat-order-item': modals.deleteMincedMeatOrderItem(actionTarget.dataset.orderId, actionTarget.dataset.itemId); break;
         case 'open-rizky-add-order-modal': modals.openRizkyAddOrderModal(); break;
         case 'save-rizky-orders': modals.saveRizkyOrders(); break;
+        case 'open-maykawa-add-order-modal': modals.openMaykawaAddOrderModal(); break;
+        case 'save-maykawa-orders': modals.saveMaykawaOrders(); break;
+        case 'open-surovina-source-modal': modals.openSurovinaSourceModal(); break;
+        case 'open-add-suroviny-modal-from-stock': modals.openAddSurovinyModalFromStock(); break;
+        case 'open-yield-adjustment-modal': modals.openYieldAdjustmentModal(); break;
+        case 'save-yield-adjustment': modals.saveYieldAdjustment(); break;
+        case 'save-added-suroviny': modals.saveAddedSuroviny(); break;
         
         // General
-        case 'close-modal': actionTarget.closest('.modal').classList.remove('active'); break;
+        case 'go-to-view':
+            const targetView = actionTarget.dataset.viewTarget;
+            if (targetView) {
+                appState.ui.activeView = targetView;
+                render();
+                if (actionTarget.closest('#production-actions-modal')) {
+                    DOMElements.productionActionsModal.classList.remove('active');
+                }
+            }
+            break;
+        case 'close-modal':
+            const modal = actionTarget.closest('.modal');
+            if (modal) modal.classList.remove('active');
+            break;
     }
 }
 
@@ -156,8 +297,42 @@ function handleGlobalChange(e) {
     if (target.matches('.spizy-done-input')) {
         mainPage.handleSpizyDoneChange(target);
     }
+    if (target.matches('.main-order-done-input')) {
+        mainPage.handleMainOrderDoneChange(target);
+    }
+     if (target.matches('.pre-production-done-input')) {
+        mainPage.handlePreProductionDoneChange(target);
+    }
     if (target.id === 'calculator-item-surovina' || target.id === 'calculator-item-type') {
         calculator.renderCustomerInputs();
+    }
+    if (target.matches('.shortage-stock-input')) {
+        mainPage.handleShortageStockChange(target);
+    }
+    if (target.matches('.shortage-done-count-input')) {
+        mainPage.handleShortageDoneCountChange(target);
+    }
+    if (target.matches('[data-action="toggle-item-stabilized"]')) {
+        const { orderId, itemId } = target.dataset;
+        const order = appState.orders.find(o => o.id === orderId);
+        const item = order?.items.find(i => i.id === itemId);
+        if (item) {
+            item.isStabilized = target.checked;
+
+            // Save this preference for future orders
+            const customerId = order.customerId;
+            const type = item.type;
+            if (!appState.mincedMeatStabilizedDefaults[customerId]) {
+                appState.mincedMeatStabilizedDefaults[customerId] = {};
+            }
+            appState.mincedMeatStabilizedDefaults[customerId][type] = target.checked;
+
+            saveState();
+             // If the change happens in the minced meat modal, re-render its content
+            if (target.closest('#minced-meat-modal')) {
+                modals.openMincedMeatModal(); // This function re-renders the content
+            }
+        }
     }
 }
 

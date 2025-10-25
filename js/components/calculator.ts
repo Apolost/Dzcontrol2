@@ -173,3 +173,52 @@ export function deleteItem(itemId) {
     renderCalculator();
     showToast('Položka z kalkulace odebrána.');
 }
+
+export function exportCalculatorToPdf() {
+    const { calculatorItems } = appState.ui;
+    if (!calculatorItems || calculatorItems.length === 0) {
+        showToast('Není co exportovat. Přidejte položky do kalkulace.', 'error');
+        return;
+    }
+
+    const summary = {};
+    calculatorItems.forEach(item => {
+        const surovina = appState.suroviny.find(s => s.id === item.surovinaId);
+        if (!surovina) return;
+
+        let itemTotalKg = 0;
+        for (const customerId in item.customerBoxes) {
+            const boxCount = item.customerBoxes[customerId];
+            if (boxCount > 0) {
+                const weights = appState.boxWeights[customerId]?.[item.surovinaId];
+                const boxWeightInGrams = (weights && item.type && weights[item.type]) ? weights[item.type] : 10000;
+                itemTotalKg += boxCount * (boxWeightInGrams / 1000);
+            }
+        }
+        summary[item.surovinaId] = (summary[item.surovinaId] || 0) + itemTotalKg;
+    });
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const date = appState.ui.selectedDate;
+    const formattedDate = new Date(date).toLocaleDateString('cs-CZ');
+
+    doc.setFontSize(18);
+    doc.text(`Kalkulacka suroviny - ${formattedDate}`, 14, 22);
+
+    const head = [['Surovina', 'Celkem potreba (kg)']];
+    const body = Object.entries(summary).map(([surovinaId, totalKg]) => {
+        const surovina = appState.suroviny.find(s => s.id === surovinaId);
+        return [surovina?.name || 'Neznama', totalKg.toFixed(2)];
+    });
+
+    doc.autoTable({
+        startY: 30,
+        head: head,
+        body: body,
+        styles: { font: 'Helvetica' }
+    });
+
+    doc.save(`Kalkulacka_suroviny_${date}.pdf`);
+    showToast('PDF s výsledky kalkulace bylo vygenerováno.');
+}
