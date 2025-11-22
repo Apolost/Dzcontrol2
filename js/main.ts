@@ -65,60 +65,38 @@ export function updateInfoBar() {
     let currentFlockHtml = '<strong>N/A</strong>';
     let nextFlockHtml = '<strong>Žádný další</strong>';
 
-    if (selectedDate === todayStr && timeline.length > 0) {
-        const now = new Date();
-        const nowMinutes = now.getHours() * 60 + now.getMinutes();
-        
-        const currentFlockItem = timeline.find(item => item.type === 'flock' && nowMinutes >= item.startTime && nowMinutes < item.endTime);
-        
-        if (currentFlockItem) {
-            currentFlockHtml = `<strong>${currentFlockItem.name} (${currentFlockItem.avgWeight.toFixed(2)} kg)</strong>`;
-        } else {
-            const isBeforeStart = nowMinutes < timeline[0].startTime;
-            const isAfterEnd = nowMinutes >= timeline[timeline.length - 1].endTime;
-            if (isBeforeStart) {
-                currentFlockHtml = "<strong>Před začátkem</strong>";
-            } else if (isAfterEnd) {
-                currentFlockHtml = "<strong>Ukončeno</strong>";
-            } else {
-                currentFlockHtml = '<strong>Pauza / Porucha</strong>';
-            }
-        }
+    if (selectedDate === todayStr) {
+        if (timeline.length > 0) {
+            const nowInMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+            const currentFlockItem = timeline.find(item => item.type === 'flock' && nowInMinutes >= item.startTime && nowInMinutes < item.endTime);
+            const nextFlockItem = timeline.find(item => item.type === 'flock' && item.startTime > nowInMinutes);
 
-        const nextFlockItem = timeline.find(item => item.type === 'flock' && item.startTime > nowMinutes);
-        if (nextFlockItem) {
-            nextFlockHtml = `<strong>${nextFlockItem.name} (${nextFlockItem.avgWeight.toFixed(2)} kg) v ${minutesToTimeString(nextFlockItem.startTime)}</strong>`;
+            if (currentFlockItem) {
+                currentFlockHtml = `<strong>${currentFlockItem.name}</strong> (${currentFlockItem.avgWeight.toFixed(2)} kg)`;
+            }
+            if (nextFlockItem) {
+                nextFlockHtml = `<strong>${nextFlockItem.name}</strong> (${nextFlockItem.avgWeight.toFixed(2)} kg)`;
+            }
         }
     }
 
-    const timeString = new Date().toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
-
     infoBar.innerHTML = `
-        <span class="info-bar-item" title="Aktuální čas">
-            <i data-feather="clock"></i>
-            <strong>${timeString}</strong>
-        </span>
-        <span class="info-bar-item" title="Číslo týdne">
-            <i data-feather="calendar"></i>
-            <span>Týden: <strong>${weekNum}</strong></span>
-        </span>
-        <span class="info-bar-item" title="Aktuálně zpracovávaný chov">
-            <i data-feather="truck"></i>
-            <span>Aktuální chov: ${currentFlockHtml}</span>
-        </span>
-        <span class="info-bar-item" title="Další chov na porcovně">
-            <i data-feather="chevrons-right"></i>
-            <span>Další chov: ${nextFlockHtml}</span>
-        </span>
-        <span class="info-bar-item" title="Předpokládaný konec linky">
-            <i data-feather="flag"></i>
-            <span>Konec: <strong>${endTimeString}</strong></span>
-        </span>
+        <div class="info-bar-item">
+            <i data-feather="calendar"></i> Týden: <strong>${weekNum}</strong>
+        </div>
+        <div class="info-bar-item">
+            <i data-feather="clock"></i> Konec linky: <strong>${endTimeString}</strong>
+        </div>
+        <div class="info-bar-item">
+            <i data-feather="git-commit"></i> Aktuální chov: ${currentFlockHtml}
+        </div>
+        <div class="info-bar-item">
+            <i data-feather="chevrons-right"></i> Další chov: ${nextFlockHtml}
+        </div>
     `;
 
-    feather.replace({ width: '18px', height: '18px' });
+    feather.replace();
 }
-
 
 export function startClock() {
     const clockElement = document.getElementById('digital-clock');
@@ -126,89 +104,165 @@ export function startClock() {
 
     function updateClock() {
         const now = new Date();
-        const hours = now.getHours().toString().padStart(2, '0');
-        const minutes = now.getMinutes().toString().padStart(2, '0');
-        const seconds = now.getSeconds().toString().padStart(2, '0');
-        clockElement.textContent = `${hours}:${minutes}:${seconds}`;
+        const timeString = now.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        clockElement.textContent = timeString;
     }
-
     updateClock();
     setInterval(updateClock, 1000);
 }
 
 export function bindEvents() {
-    DOMElements.selectedDateInput.addEventListener('change', () => {
-        appState.ui.selectedDate = DOMElements.selectedDateInput.value;
+    DOMElements.selectedDateInput.addEventListener('change', (e) => {
+        appState.ui.selectedDate = e.target.value;
         render();
     });
-    
     bindGlobalEvents();
 }
 
+export function changeDate(days) {
+    const currentDate = new Date(appState.ui.selectedDate + 'T00:00:00');
+    currentDate.setDate(currentDate.getDate() + days);
+    appState.ui.selectedDate = currentDate.toISOString().split('T')[0];
+    render();
+}
+
 export async function render() {
-    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-    const activeLink = document.querySelector(`.nav-link[data-view="${appState.ui.activeView}"]`);
-    if (activeLink) {
-        activeLink.classList.add('active');
-        const parentDetails = activeLink.closest('details');
-        if (parentDetails) parentDetails.open = true;
-    }
-    
     DOMElements.selectedDateInput.value = appState.ui.selectedDate;
-    
-    const mainContainer = DOMElements.appMain;
-    if (mainContainer) {
-        const viewHtml = await loadView(appState.ui.activeView);
-        mainContainer.innerHTML = viewHtml;
-    } else {
-        console.error("#app-main container not found");
-        return;
-    }
-
-    const sidebarToggleButton = document.getElementById('sidebar-toggle-button');
-    if (sidebarToggleButton) {
-        if (appState.ui.activeView === 'employees') {
-            sidebarToggleButton.style.display = 'block';
-        } else {
-            sidebarToggleButton.style.display = 'none';
-        }
-    }
-    
     updateInfoBar();
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    
+    // Update active nav link
+    DOMElements.navLinks.forEach(link => {
+        link.classList.toggle('active', link.dataset.view === appState.ui.activeView);
+        const detailsParent = link.closest('details');
+        if (detailsParent && link.classList.contains('active')) {
+            detailsParent.open = true;
+        }
+    });
 
-    switch (appState.ui.activeView) {
+    const viewName = appState.ui.activeView;
+    const viewHtml = await loadView(viewName);
+    DOMElements.appMain.innerHTML = viewHtml;
+
+    switch (viewName) {
         case 'main-page': renderMainPage(); break;
         case 'daily-plan': renderDailyPlan(); break;
         case 'orders': renderOrders(); break;
         case 'calendar': renderCalendar(); break;
+        case 'kfc': renderKFC(); break;
+        case 'zmeny': renderChanges(); break;
         case 'calculator': renderCalculator(); break;
         case 'production-overview': renderProductionOverview(); break;
-        case 'monthly-overview': renderMonthlyOverview(); break;
         case 'raw-material-orders': renderRawMaterialOrders(); break;
-        case 'export-data': renderExportData(); break;
         case 'qr-code': renderQrCodePage(); break;
-        case 'box-weights': renderBoxWeights(); break;
-        case 'create-mix': renderCreateMix(); break;
-        case 'create-product': renderCreateProduct(); break;
-        case 'frozen-products': renderFrozenProductsPage(); break;
-        case 'palette-weights': renderPaletteWeights(); break;
-        case 'zmeny': renderChanges(); break;
-        case 'employees': initEmployeesApp(); break;
-        case 'kfc': renderKFC(); break;
-        case 'kfc-products': renderKfcProductsPage(); break;
-        case 'spizy-settings': renderSpizySettings(); break;
-        case 'customers': renderCustomers(); break;
-        case 'line-settings': renderLineSettings(); break;
+        case 'export-data': renderExportData(); break;
+        case 'monthly-overview': renderMonthlyOverview(); break;
         case 'stock-boxes': renderStockBoxes(); break;
         case 'stock-trays': renderStockTrays(); break;
+        case 'employees': initEmployeesApp(); break;
+        // Settings views
+        case 'customers': renderCustomers(); break;
+        case 'create-product': renderCreateProduct(); break;
+        case 'create-mix': renderCreateMix(); break;
+        case 'frozen-products': renderFrozenProductsPage(); break;
+        case 'box-weights': renderBoxWeights(); break;
+        case 'palette-weights': renderPaletteWeights(); break;
+        case 'spizy-settings': renderSpizySettings(); break;
+        case 'kfc-products': renderKfcProductsPage(); break;
+        case 'line-settings': renderLineSettings(); break;
     }
-    
+
     feather.replace();
 }
 
-export function changeDate(days) {
-    const currentDate = new Date(appState.ui.selectedDate + 'T12:00:00Z'); // Use noon to avoid timezone DST issues
-    currentDate.setDate(currentDate.getDate() + days);
-    appState.ui.selectedDate = currentDate.toISOString().split('T')[0];
-    render();
+function checkShortages() {
+    const date = appState.ui.selectedDate;
+    const today = new Date().toISOString().split('T')[0];
+
+    // Only show notifications for the current day's plan
+    if (date !== today) {
+        const trayNotif = document.getElementById('tray-shortage-notification');
+        if (trayNotif) trayNotif.style.display = 'none';
+        const chickenNotif = document.getElementById('chicken-shortage-notification');
+        if (chickenNotif) chickenNotif.style.display = 'none';
+        return;
+    }
+    
+    // 1. Tray Shortage Check
+    if (!appState.ui.trayNotificationDismissed) {
+        const trayNeeds = new Map(appState.trayTypes.map(tt => [tt.id, 0]));
+        const defaultTrayTypeId = appState.trayTypes[0]?.id;
+
+        appState.orders
+            .filter(o => o.date === date)
+            .forEach(order => {
+                order.items.forEach(item => {
+                    if (item.isActive && item.doneCount < item.boxCount && (item.type === 'OA' || item.type === 'RB')) {
+                        const trayTypeId = appState.customerTrayAssignments[order.customerId]?.[item.surovinaId] || defaultTrayTypeId;
+                        if (trayNeeds.has(trayTypeId)) {
+                            const count = (item.boxCount || 0) - (item.doneCount || 0);
+                            trayNeeds.set(trayTypeId, trayNeeds.get(trayTypeId) + count);
+                        }
+                    }
+                });
+            });
+
+        const shortages = [];
+        appState.trayTypes.forEach(trayType => {
+            const needed = trayNeeds.get(trayType.id) || 0;
+            if (needed > 0) {
+                const stockPallets = appState.trayStock[trayType.id] || 0;
+                const piecesPerPallet = appState.trayPalletSettings[trayType.id] || 5000;
+                const stockPieces = stockPallets * piecesPerPallet;
+                if (stockPieces < needed) {
+                    shortages.push({ name: trayType.name, needed, stock: stockPieces });
+                }
+            }
+        });
+
+        const notification = document.getElementById('tray-shortage-notification');
+        const list = document.getElementById('tray-shortage-list');
+        if (notification && list) {
+            if (shortages.length > 0) {
+                list.innerHTML = shortages.map(s => `<li>${s.name}: Chybí ${(s.needed - s.stock).toLocaleString('cs-CZ')} ks</li>`).join('');
+                notification.style.display = 'block';
+            } else {
+                notification.style.display = 'none';
+            }
+        }
+    }
+
+    // 2. Line Plan notification check
+    const { timeline } = calculateTimeline(date);
+    const notification = document.getElementById('chicken-shortage-notification');
+    const textEl = document.getElementById('chicken-shortage-text');
+
+    if (!notification || !textEl) return;
+
+    if (timeline.length > 0) {
+        const lastEvent = timeline[timeline.length - 1];
+        const endTimeInMinutes = lastEvent.endTime;
+        
+        if (endTimeInMinutes > 14.5 * 60) { // After 14:30
+            const chickenNotificationInfo = appState.ui.chickenNotificationInfo || { lastCheckedDate: null, count: 0 };
+            
+            const totalChickens = timeline.reduce((sum, item) => sum + (item.type === 'flock' ? item.count : 0), 0);
+            
+            if (chickenNotificationInfo.lastCheckedDate !== date || chickenNotificationInfo.count !== totalChickens) {
+                const endTimeString = minutesToTimeString(endTimeInMinutes);
+                textEl.textContent = `Předpokládaný konec linky je v ${endTimeString}. Linka pojede déle než do 14:30.`;
+                notification.style.display = 'block';
+                appState.ui.chickenNotificationInfo = { lastCheckedDate: date, count: totalChickens };
+            }
+        } else {
+            notification.style.display = 'none';
+        }
+    } else {
+        notification.style.display = 'none';
+    }
+}
+
+
+export function initializeNotificationInterval() {
+    setInterval(checkShortages, 30000); // Check every 30 seconds
 }

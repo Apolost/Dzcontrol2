@@ -570,3 +570,128 @@ export function renderStockTrays() {
     container.innerHTML = listHtml + tableHTML;
     feather.replace();
 }
+
+// --- TRAY STOCK ---
+
+export function openTrayStockModal() {
+    const modal = DOMElements.trayStockModal;
+    const body = modal.querySelector('#tray-stock-modal-body');
+    const date = appState.ui.selectedDate;
+
+    // Calculate needs
+    const trayCounts = new Map(appState.trayTypes.map(tt => [tt.id, 0]));
+    const defaultTrayTypeId = appState.trayTypes[0]?.id;
+
+    appState.orders
+        .filter(o => o.date === date)
+        .forEach(order => {
+            order.items.forEach(item => {
+                if (item.isActive && (item.type === 'OA' || item.type === 'RB')) {
+                    const trayTypeId = appState.customerTrayAssignments[order.customerId]?.[item.surovinaId] || defaultTrayTypeId;
+                    if (trayCounts.has(trayTypeId)) {
+                        const count = item.boxCount || 0;
+                        trayCounts.set(trayTypeId, trayCounts.get(trayTypeId) + count);
+                    }
+                }
+            });
+        });
+
+    let tableHTML = `
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Typ misky</th>
+                    <th style="text-align: right;">Potřeba dnes (ks)</th>
+                    <th style="text-align: right;">Skladem (palety)</th>
+                    <th style="text-align: right;">Skladem (ks)</th>
+                    <th style="text-align: right;">Rozdíl (ks)</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    appState.trayTypes.forEach(trayType => {
+        const neededCount = trayCounts.get(trayType.id) || 0;
+        const stockPallets = appState.trayStock[trayType.id] || 0;
+        const piecesPerPallet = appState.trayPalletSettings[trayType.id] || 5000;
+        const stockPieces = stockPallets * piecesPerPallet;
+        const difference = stockPieces - neededCount;
+        const diffClass = difference < 0 ? 'shortage' : 'surplus';
+
+        tableHTML += `
+            <tr>
+                <td>${trayType.name}</td>
+                <td style="text-align: right;">${neededCount.toLocaleString('cs-CZ')}</td>
+                <td style="text-align: right; width: 150px;">
+                    <input type="number" class="tray-stock-input" data-tray-id="${trayType.id}" value="${stockPallets}" min="0" style="width: 100px; text-align: right;">
+                </td>
+                <td style="text-align: right;">${stockPieces.toLocaleString('cs-CZ')}</td>
+                <td class="${diffClass}" style="text-align: right; font-weight: bold;">${difference.toLocaleString('cs-CZ')}</td>
+            </tr>
+        `;
+    });
+
+    tableHTML += '</tbody></table>';
+    body.innerHTML = tableHTML;
+    modal.classList.add('active');
+}
+
+export function saveTrayStock() {
+    const modal = DOMElements.trayStockModal;
+    let changes = 0;
+    modal.querySelectorAll('.tray-stock-input').forEach(input => {
+        const trayId = input.dataset.trayId;
+        const pallets = parseFloat(input.value) || 0;
+        if (appState.trayStock[trayId] !== pallets) {
+            changes++;
+            appState.trayStock[trayId] = pallets;
+        }
+    });
+
+    if (changes > 0) {
+        saveState();
+        showToast('Stav skladu misek byl uložen.');
+    }
+    
+    modal.classList.remove('active');
+}
+
+export function openTrayPalletSettingsModal() {
+    const modal = DOMElements.trayPalletSettingsModal;
+    const typeSelect = modal.querySelector('#tray-pallet-settings-type');
+    const countInput = modal.querySelector('#tray-pallet-settings-count');
+
+    typeSelect.innerHTML = appState.trayTypes.map(tt => `<option value="${tt.id}">${tt.name}</option>`).join('');
+    
+    const updateCountInput = () => {
+        const selectedId = typeSelect.value;
+        countInput.value = appState.trayPalletSettings[selectedId] || 5000;
+    };
+    
+    typeSelect.onchange = updateCountInput;
+
+    updateCountInput(); // Initial population
+    modal.classList.add('active');
+}
+
+export function saveTrayPalletSettings() {
+    const modal = DOMElements.trayPalletSettingsModal;
+    const typeId = modal.querySelector('#tray-pallet-settings-type').value;
+    const count = parseInt(modal.querySelector('#tray-pallet-settings-count').value, 10);
+    
+    if (!typeId || isNaN(count) || count < 0) {
+        showToast('Zadejte platné hodnoty.', 'error');
+        return;
+    }
+
+    appState.trayPalletSettings[typeId] = count;
+    saveState();
+    showToast('Nastavení palety uloženo.');
+    
+    modal.classList.remove('active');
+    
+    // Re-render the stock modal if it's open
+    if (DOMElements.trayStockModal.classList.contains('active')) {
+        openTrayStockModal();
+    }
+}

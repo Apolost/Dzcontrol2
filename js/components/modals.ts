@@ -790,3 +790,158 @@ export function saveYieldAdjustment() {
     
     modal.classList.remove('active');
 }
+
+// --- Wings Modal ---
+export function openWingsModal() {
+    const modal = DOMElements.wingsModal;
+    modal.querySelector('#wings-date').textContent = new Date(appState.ui.selectedDate).toLocaleDateString('cs-CZ');
+    renderWingsProductionModal();
+    modal.classList.add('active');
+}
+
+function renderWingsProductionModal() {
+    const container = DOMElements.wingsModal.querySelector('#wings-production-table-container');
+    const date = appState.ui.selectedDate;
+
+    const wingsSurovina = appState.suroviny.find(s => s.name.toUpperCase() === 'KŘÍDLA');
+    if (!wingsSurovina) {
+        container.innerHTML = '<p class="shortage">Surovina "KŘÍDLA" nebyla nalezena.</p>';
+        return;
+    }
+
+    const customerOrders = {}; // { customerId: { name: 'Customer Name', totalBoxes: 0 } }
+    appState.orders.filter(o => o.date === date).forEach(order => {
+        order.items.forEach(item => {
+            if (item.surovinaId === wingsSurovina.id && item.isActive) {
+                if (!customerOrders[order.customerId]) {
+                    const customer = appState.zakaznici.find(c => c.id === order.customerId);
+                    customerOrders[order.customerId] = { name: customer.name, totalBoxes: 0 };
+                }
+                customerOrders[order.customerId].totalBoxes += item.boxCount;
+            }
+        });
+    });
+
+    if (Object.keys(customerOrders).length === 0) {
+        container.innerHTML = '<p>Pro tento den nejsou žádné objednávky křídel.</p>';
+        return;
+    }
+
+    let tableHTML = `<table class="data-table">
+        <thead>
+            <tr>
+                <th>Zákazník</th>
+                <th>Celkem beden (ks)</th>
+                <th>Potřeba palet (ks)</th>
+                <th>Zbývá beden (ks)</th>
+            </tr>
+        </thead>
+        <tbody>`;
+
+    for (const customerId in customerOrders) {
+        const order = customerOrders[customerId];
+        const boxesPerPallet = appState.wingsPackagingConfig[customerId]?.boxesPerPallet || 36;
+        const pallets = Math.floor(order.totalBoxes / boxesPerPallet);
+        const remainingBoxes = order.totalBoxes % boxesPerPallet;
+
+        tableHTML += `
+            <tr>
+                <td>${order.name}</td>
+                <td>${order.totalBoxes}</td>
+                <td>${pallets}</td>
+                <td>${remainingBoxes}</td>
+            </tr>
+        `;
+    }
+
+    tableHTML += '</tbody></table>';
+    container.innerHTML = tableHTML;
+}
+
+export function openWingsSettingsModal() {
+    const modal = DOMElements.wingsSettingsModal;
+    const customerSelect = modal.querySelector('#wings-settings-customer');
+    
+    customerSelect.innerHTML = appState.zakaznici.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    
+    const loadSettings = (customerId) => {
+        const config = appState.wingsPackagingConfig[customerId] || {};
+        modal.querySelector('#wings-settings-packaging-type').value = config.packagingType || 'OA';
+        modal.querySelector('#wings-settings-trays-per-order-box').value = config.traysPerOrderBox || 4;
+        modal.querySelector('#wings-settings-trays-per-box').value = config.traysPerBox || 12;
+        modal.querySelector('#wings-settings-boxes-per-pallet').value = config.boxesPerPallet || 36;
+    };
+    
+    customerSelect.onchange = (e) => loadSettings(e.target.value);
+    
+    loadSettings(customerSelect.value); // Load for the first customer initially
+    modal.classList.add('active');
+}
+
+export function saveWingsSettings() {
+    const modal = DOMElements.wingsSettingsModal;
+    const customerId = modal.querySelector('#wings-settings-customer').value;
+    const packagingType = modal.querySelector('#wings-settings-packaging-type').value;
+    const traysPerOrderBox = parseInt(modal.querySelector('#wings-settings-trays-per-order-box').value) || 4;
+    const traysPerBox = parseInt(modal.querySelector('#wings-settings-trays-per-box').value) || 12;
+    const boxesPerPallet = parseInt(modal.querySelector('#wings-settings-boxes-per-pallet').value) || 36;
+
+    if (!appState.wingsPackagingConfig[customerId]) {
+        appState.wingsPackagingConfig[customerId] = {};
+    }
+
+    appState.wingsPackagingConfig[customerId] = { packagingType, traysPerOrderBox, traysPerBox, boxesPerPallet };
+    saveState();
+    showToast('Nastavení balení křídel uloženo.');
+    modal.classList.remove('active');
+    renderWingsProductionModal(); // Re-render the main wings modal with new settings
+}
+
+export function exportWingsToPdf() {
+    const date = appState.ui.selectedDate;
+    const wingsSurovina = appState.suroviny.find(s => s.name.toUpperCase() === 'KŘÍDLA');
+    if (!wingsSurovina) return;
+
+    const customerOrders = {};
+    appState.orders.filter(o => o.date === date).forEach(order => {
+        order.items.forEach(item => {
+            if (item.surovinaId === wingsSurovina.id && item.isActive) {
+                if (!customerOrders[order.customerId]) {
+                    const customer = appState.zakaznici.find(c => c.id === order.customerId);
+                    customerOrders[order.customerId] = { name: customer.name, totalBoxes: 0 };
+                }
+                customerOrders[order.customerId].totalBoxes += item.boxCount;
+            }
+        });
+    });
+
+    if (Object.keys(customerOrders).length === 0) {
+        showToast('Není co exportovat.', 'error');
+        return;
+    }
+    
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const formattedDate = new Date(date).toLocaleDateString('cs-CZ');
+
+    doc.setFontSize(18);
+    doc.text(`Sestaveni palet - Kridla - ${formattedDate}`, 14, 22);
+
+    const head = [['Zakaznik', 'Celkem beden (ks)', 'Potreba palet (ks)', 'Zbyva beden (ks)']];
+    const body = Object.entries(customerOrders).map(([customerId, orderData]) => {
+        const boxesPerPallet = appState.wingsPackagingConfig[customerId]?.boxesPerPallet || 36;
+        const pallets = Math.floor(orderData.totalBoxes / boxesPerPallet);
+        const remainingBoxes = orderData.totalBoxes % boxesPerPallet;
+        return [orderData.name, orderData.totalBoxes, pallets, remainingBoxes];
+    });
+
+    doc.autoTable({
+        startY: 30,
+        head: head,
+        body: body,
+        styles: { font: 'Helvetica' }
+    });
+
+    doc.save(`Sestaveni_palet_kridla_${date}.pdf`);
+    showToast('PDF bylo vygenerováno.');
+}

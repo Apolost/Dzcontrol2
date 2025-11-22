@@ -284,6 +284,7 @@
             <button class="btn btn-primary" data-action="open-rizky-modal"><i data-feather="scissors"></i>Kalkulace Řízků</button>
             <button class="btn btn-primary" data-action="open-maykawa-modal"><i data-feather="codepen"></i>Kalkulace Steaku</button>
             <button class="btn btn-primary" data-action="open-minced-meat-modal"><i data-feather="grid"></i>Mleté maso</button>
+            <button class="btn btn-primary" data-action="open-wings-modal"><i data-feather="clipboard"></i>Kalkulace Křídel</button>
             <button class="btn btn-primary" data-action="open-frozen-main-modal"><i data-feather="wind"></i>Mražená výroba</button>
         </div>
         <div class="modal-footer">
@@ -310,6 +311,64 @@
             <button class="btn btn-secondary" data-action="apply-suggested-weight">Použít navrhovanou váhu</button>
             <button class="btn btn-secondary" data-action="close-modal">Zrušit</button>
             <button class="btn btn-primary" data-action="save-temp-weights">Uložit dočasné změny</button>
+        </div>
+    </div>
+</div>
+
+<div id="wings-modal" class="modal">
+    <div class="modal-content" style="max-width: 90vw;">
+        <div class="modal-header">
+            <h2 class="modal-title">Kalkulace Křídel - Sestavení palet na den <span id="wings-date"></span></h2>
+            <div>
+                 <button class="btn btn-secondary" data-action="export-wings-pdf"><i data-feather="file-text"></i>Export PDF</button>
+                 <button class="btn btn-secondary" data-action="open-wings-settings-modal"><i data-feather="settings"></i>Nastavení</button>
+                 <button class="btn-icon" data-action="close-modal"><i data-feather="x"></i></button>
+            </div>
+        </div>
+        <div class="modal-body" id="wings-production-table-container">
+            <!-- JS generated content -->
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-primary" data-action="close-modal">Zavřít</button>
+        </div>
+    </div>
+</div>
+
+<div id="wings-settings-modal" class="modal" style="z-index: 1010;">
+    <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+            <h2 class="modal-title">Nastavení balení křídel</h2>
+            <button class="btn-icon" data-action="close-modal"><i data-feather="x"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="wings-settings-customer">Zákazník</label>
+                <select id="wings-settings-customer"></select>
+            </div>
+            <div class="form-group">
+                <label for="wings-settings-packaging-type">Typ balení (pro info)</label>
+                <select id="wings-settings-packaging-type">
+                    <option value="OA">Malé misky (OA)</option>
+                    <option value="RB">Rodinné balení (RB)</option>
+                    <option value="VL">Volně ložené (VL)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="wings-settings-trays-per-order-box">Misek v bedně na objednávku (ks)</label>
+                <input type="number" id="wings-settings-trays-per-order-box" min="1">
+            </div>
+            <div class="form-group">
+                <label for="wings-settings-trays-per-box">Misek v přepravní bedně (ks)</label>
+                <input type="number" id="wings-settings-trays-per-box" min="1">
+            </div>
+            <div class="form-group">
+                <label for="wings-settings-boxes-per-pallet">Beden na paletě (ks)</label>
+                <input type="number" id="wings-settings-boxes-per-pallet" min="1">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" data-action="close-modal">Zrušit</button>
+            <button class="btn btn-primary" data-action="save-wings-settings">Uložit nastavení</button>
         </div>
     </div>
 </div>

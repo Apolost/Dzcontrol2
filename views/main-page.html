@@ -1,10 +1,9 @@
 <div id="view-main-page">
     <div class="page-header-container">
-        <h1 class="page-header" style="margin-bottom: 0;">Hlavní stránka</h1>
-        <div>
-            <button class="btn btn-secondary" id="main-page-vyroba-btn" data-action="open-production-modal"><i data-feather="tool"></i>Výroba</button>
-            <button class="btn btn-primary" data-action="open-chicken-count-modal"><i data-feather="plus-circle"></i>Denní naskladnění kuřat</button>
+        <div style="width: 100%; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;">
             <button class="btn btn-primary" data-action="add-main-order"><i data-feather="plus"></i>Přidat objednávku</button>
+            <button class="btn btn-primary" data-action="open-chicken-count-modal"><i data-feather="plus-circle"></i>Denní naskladnění kuřat</button>
+            <button class="btn btn-secondary" id="main-page-vyroba-btn" data-action="open-production-modal"><i data-feather="tool"></i>Výroba</button>
             <button class="btn btn-primary" data-action="open-surovina-source-modal"><i data-feather="truck"></i>Přidat surovinu</button>
             <button class="btn btn-primary" data-action="open-pre-production-modal"><i data-feather="calendar"></i>Předvýroba</button>
         </div>
@@ -19,6 +18,9 @@
             </div>
             <div id="main-page-alerts">
                 <!-- Alerts rendered here by JS -->
+            </div>
+            <div id="main-page-overtime-alert">
+                <!-- Chicken overtime alert rendered here by JS -->
             </div>
             <div id="main-page-order-reception-alerts">
                 <!-- Order reception alerts will be rendered here -->

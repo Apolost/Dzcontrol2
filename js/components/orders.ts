@@ -215,7 +215,7 @@ export function openAddOrderModal(customerId, orderType) {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 if (input.value === '') {
-                    input.value = 0;
+                    input.value = '0';
                 }
                 const nextInput = inputs[index + 1];
                 if (nextInput) {
@@ -374,6 +374,30 @@ function renderMainOrderProducts(category = null) {
     });
     html += '</tbody></table></div>';
     container.innerHTML = html;
+    
+    const inputs = container.querySelectorAll('.main-order-box-count');
+    inputs.forEach((input, index) => {
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (input.value === '') {
+                    input.value = '0';
+                }
+                const nextInput = inputs[index + 1];
+                if (nextInput) {
+                    nextInput.focus();
+                    nextInput.select();
+                } else {
+                    modal.querySelector('[data-action="save-main-order"]').focus();
+                }
+            }
+        });
+    });
+
+    if (inputs[0]) {
+        inputs[0].focus();
+        inputs[0].select();
+    }
 }
 
 export function saveMainOrder() {

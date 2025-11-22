@@ -178,9 +178,10 @@ function renderYieldOverview(date, flocks, totalWeight) {
             <thead>
                 <tr>
                     <th>Část</th>
-                    <th>Vyprodukováno (kg)</th>
-                    <th>Potřeba z obj. (kg)</th>
-                    <th>Potřeba z obj. (palety)</th>
+                    <th>Skladem (kg)</th>
+                    <th>Z výroby (kg)</th>
+                    <th>Celkem k dispozici (kg)</th>
+                    <th>Celková potřeba (kg)</th>
                     <th>Rozdíl (kg)</th>
                     <th>Rozdíl (palety)</th>
                 </tr>
@@ -189,41 +190,62 @@ function renderYieldOverview(date, flocks, totalWeight) {
     `;
 
     yieldData.forEach(data => {
-        const diffClass = data.difference < -0.01 ? 'shortage' : data.difference > 0.01 ? 'surplus' : '';
+        const surovina = appState.suroviny.find(s => s.name.toUpperCase().replace(' (SKELETY)', '') === data.name.toUpperCase().replace(' (SKELETY)', ''));
+
+        let stockKg = 0;
+        if (data.name === 'Stehna celkem') {
+            const thighSurovinaNames = ['STEHNA', 'HORNÍ STEHNA', 'SPODNÍ STEHNA', 'ČTVRTKY'];
+            const thighSuroviny = appState.suroviny.filter(s => thighSurovinaNames.includes(s.name.toUpperCase()));
+            stockKg = 0;
+            thighSuroviny.forEach(s => {
+                const boxes = appState.dailyStockAdjustments[date]?.[s.id] || 0;
+                stockKg += (s.stock || 0) * (s.paletteWeight || 0) + boxes * (s.boxWeight || 25);
+            });
+        } else if (surovina) {
+            const boxes = appState.dailyStockAdjustments[date]?.[surovina.id] || 0;
+            const boxWeight = surovina.boxWeight || 25;
+            stockKg = (surovina.stock || 0) * (surovina.paletteWeight || 0) + boxes * boxWeight;
+        }
+
+        const totalAvailable = stockKg + data.produced;
+        const finalDifference = totalAvailable - data.needed;
+        const paletteWeight = data.paletteWeight || surovina?.paletteWeight || 0;
+        const differencePallets = paletteWeight > 0 ? (finalDifference / paletteWeight).toFixed(2) : 'N/A';
+        const diffClass = finalDifference < -0.01 ? 'shortage' : finalDifference > 0.01 ? 'surplus' : '';
         const isTotalRow = data.name.includes('celkem');
         const rowStyle = isTotalRow ? 'font-weight: bold; background-color: var(--bg-tertiary);' : '';
-        
-        const neededPallets = data.paletteWeight > 0 ? (data.needed / data.paletteWeight).toFixed(2) : 'N/A';
-        const differencePallets = data.paletteWeight > 0 ? (data.difference / data.paletteWeight).toFixed(2) : 'N/A';
         
         tableHTML += `
             <tr style="${rowStyle}">
                 <td>${data.name}</td>
+                <td>${stockKg.toFixed(2)}</td>
                 <td>${data.produced.toFixed(2)}</td>
+                <td><strong>${totalAvailable.toFixed(2)}</strong></td>
                 <td>${data.needed.toFixed(2)}</td>
-                <td>${neededPallets}</td>
-                <td class="${diffClass}">${data.difference.toFixed(2)}</td>
+                <td class="${diffClass}">${finalDifference.toFixed(2)}</td>
                 <td class="${diffClass}">${differencePallets}</td>
             </tr>
         `;
 
         if (data.name === 'Prsa' && data.prsaNeededForRizky > 0) {
+            const prsaSurovina = appState.suroviny.find(s => s.name.toUpperCase() === 'PRSA');
+            const palletsForRizky = (prsaSurovina && prsaSurovina.paletteWeight > 0) ? (data.prsaNeededForRizky / prsaSurovina.paletteWeight).toFixed(2) : 'N/A';
             tableHTML += `
                 <tr style="font-size: 0.9em; color: var(--text-secondary);">
                     <td style="padding-left: 25px;">↳ z toho na řízky</td>
                     <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
                     <td>${data.prsaNeededForRizky.toFixed(2)}</td>
-                    <td>-</td>
-                    <td>-</td>
-                    <td>-</td>
+                    <td colspan="2" style="font-weight: bold;">(cca ${palletsForRizky} palet)</td>
                 </tr>
             `;
         }
-
-        if (data.name === 'Prsa' && data.difference > 0.01) {
+        
+        if (data.name === 'Prsa' && finalDifference > 0.01) {
             const rizkySurovina = appState.suroviny.find(s => s.name.toUpperCase() === 'ŘÍZKY');
             if (rizkySurovina) {
-                const potentialRizkyKg = data.difference * 0.70;
+                const potentialRizkyKg = finalDifference * 0.70;
                 const paletteWeight = rizkySurovina.paletteWeight || 0;
                 const potentialRizkyPalettes = paletteWeight > 0 ? (potentialRizkyKg / paletteWeight) : 0;
 
@@ -231,8 +253,9 @@ function renderYieldOverview(date, flocks, totalWeight) {
                     <tr style="font-size: 0.9em; color: var(--accent-primary);">
                         <td style="padding-left: 25px;">
                             <i data-feather="arrow-right-circle" style="width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px;"></i>
-                            převod na řízky z prsou
+                            z přebytku lze vyrobit řízky
                         </td>
+                        <td>-</td>
                         <td>-</td>
                         <td>-</td>
                         <td>-</td>
@@ -249,10 +272,10 @@ function renderYieldOverview(date, flocks, totalWeight) {
                     <tr style="font-size: 0.9em; color: var(--text-secondary);">
                         <td style="padding-left: 25px;">↳ ${partName}</td>
                         <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
                         <td>${thighNeeds[partName].toFixed(2)}</td>
-                        <td>-</td>
-                        <td>-</td>
-                        <td>-</td>
+                        <td colspan="2">-</td>
                     </tr>
                 `;
             }
@@ -266,8 +289,8 @@ function renderYieldOverview(date, flocks, totalWeight) {
         const { maykawaConfig } = appState;
         const bonesProduced = totalThighsNeededKg * ((maykawaConfig.bonePercent || 0) / 100);
         const skinProduced = totalThighsNeededKg * ((maykawaConfig.skinPercent || 0) / 100);
-        tableHTML += `<tr style="background-color: var(--bg-tertiary);"><td>Kosti (z Maykawa)</td><td>${bonesProduced.toFixed(2)}</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>`;
-        tableHTML += `<tr style="background-color: var(--bg-tertiary);"><td>Kůže (z Maykawa)</td><td>${skinProduced.toFixed(2)}</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>`;
+        tableHTML += `<tr style="background-color: var(--bg-tertiary);"><td>Kosti (z Maykawa)</td><td>-</td><td>${bonesProduced.toFixed(2)}</td><td>${bonesProduced.toFixed(2)}</td><td>-</td><td colspan="2">-</td></tr>`;
+        tableHTML += `<tr style="background-color: var(--bg-tertiary);"><td>Kůže (z Maykawa)</td><td>-</td><td>${skinProduced.toFixed(2)}</td><td>${skinProduced.toFixed(2)}</td><td>-</td><td colspan="2">-</td></tr>`;
     }
 
     tableHTML += '</tbody></table>';

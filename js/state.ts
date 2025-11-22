@@ -77,6 +77,24 @@ function setupDefaultData() {
     
     appState.boxTypes = [...BOX_TYPES];
     appState.trayTypes = [...TRAY_TYPES];
+    appState.trayStock = {};
+    const trayPalletDefaults = {
+        'RB Velká 60': 3565,
+        'RB Velká 85': 3255,
+        'RB Velká 50': 3565,
+        'RB Velká 40': 3720,
+        'RB Černá 50': 3565,
+        'OA 83': 6000,
+        'OA 63': 6500,
+        'OA 50': 6700,
+        'OA Černá 63': 1000,
+        'OA Černá 83': 1000,
+        'OA Černá 50': 1000,
+    };
+    appState.trayPalletSettings = {};
+    appState.trayTypes.forEach(tt => {
+        appState.trayPalletSettings[tt.id] = trayPalletDefaults[tt.name] || 5000; // Use default or fallback
+    });
     appState.customerBoxAssignments = {};
     appState.customerTrayAssignments = {};
 
@@ -203,6 +221,8 @@ function setupDefaultData() {
     appState.dismissedPriceChangeAlerts = [];
     appState.maykawaConfig = { bonePercent: 15, skinPercent: 10, deboningSpeed: 100 };
     appState.rizkyConfig = { prepad: 0, linePerformance: 2500, mastna: 0, stock: 0, startTime: '06:00' };
+    appState.wingsConfig = { stock: 0, linePerformance: 1000, startTime: '07:00' };
+    appState.wingsPackagingConfig = {};
     
     appState.kfcSuroviny = [
         {id: 'kfc_s_01', name: 'rizky kfc', stockBoxes: 0, boxWeight: 10000},
@@ -332,6 +352,29 @@ export function loadState() {
         // NEW Tray migration
         if (!appState.trayTypes) appState.trayTypes = [...TRAY_TYPES];
         if (!appState.customerTrayAssignments) appState.customerTrayAssignments = {};
+        if (!appState.trayStock) appState.trayStock = {};
+        if (!appState.trayPalletSettings) appState.trayPalletSettings = {};
+        
+        const trayPalletDefaults = {
+            'RB Velká 60': 3565,
+            'RB Velká 85': 3255,
+            'RB Velká 50': 3565,
+            'RB Velká 40': 3720,
+            'RB Černá 50': 3565,
+            'OA 83': 6000,
+            'OA 63': 6500,
+            'OA 50': 6700,
+            'OA Černá 63': 1000,
+            'OA Černá 83': 1000,
+            'OA Černá 50': 1000,
+        };
+        (appState.trayTypes || TRAY_TYPES).forEach(tt => {
+            // If the setting doesn't exist or is the old default of 5000, update it.
+            if (appState.trayPalletSettings[tt.id] === undefined || appState.trayPalletSettings[tt.id] === 5000) {
+                 appState.trayPalletSettings[tt.id] = trayPalletDefaults[tt.name] || 5000;
+            }
+        });
+        
         const fallbackDefaultTrayTypeId = appState.trayTypes[0]?.id;
 
         if (appState.zakaznici && appState.suroviny) {
@@ -621,6 +664,23 @@ export function loadState() {
          if (!appState.rizkyConfig) {
             appState.rizkyConfig = { prepad: 0, linePerformance: 2500, mastna: 0, stock: 0, startTime: '06:00' };
         }
+        if (!appState.wingsConfig) {
+            appState.wingsConfig = { stock: 0, linePerformance: 1000, startTime: '07:00' };
+        }
+        if (!appState.wingsPackagingConfig) appState.wingsPackagingConfig = {};
+        if (appState.wingsPackagingConfig) {
+            Object.keys(appState.wingsPackagingConfig).forEach(customerId => {
+                const config = appState.wingsPackagingConfig[customerId];
+                if (config) {
+                    if (config.traysPerOrderBox === undefined) {
+                        config.traysPerOrderBox = 4; // Default trays for order box
+                    }
+                    if (config.traysPerBox === undefined || !config.traysPerBox) { // Covers undefined, null, 0, ''
+                        config.traysPerBox = 12; // Default trays for shipping box
+                    }
+                }
+            });
+        }
         if (!appState.kfcSuroviny) {
             appState.kfcSuroviny = [
                 {id: 'kfc_s_01', name: 'rizky kfc', stockBoxes: 0, boxWeight: 10000},
@@ -749,6 +809,11 @@ export function loadState() {
         editingBoxTypeId: null,
         editingTrayTypeId: null,
         quickOrderCustomerId: null,
+        trayNotificationDismissed: false,
+        chickenNotificationInfo: {
+            lastCheckedDate: null,
+            count: 0
+        },
     };
 }
 

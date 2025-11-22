@@ -142,7 +142,12 @@
     <div class="modal-content" style="width: 95vw; max-width: 1200px; height: 90vh; display: flex; flex-direction: column;">
         <div class="modal-header">
             <h2 class="modal-title" id="surovina-shortage-title"></h2>
-            <button class="btn-icon" data-action="close-modal"><i data-feather="x"></i></button>
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <button class="btn btn-secondary" id="surovina-shortage-adjust-weight-btn" data-action="open-temp-weight-modal">
+                    <i data-feather="edit-3"></i> Upravit váhu
+                </button>
+                <button class="btn-icon" data-action="close-modal"><i data-feather="x"></i></button>
+            </div>
         </div>
         <div class="modal-body" id="surovina-shortage-body">
             <!-- JS Generated Content -->
@@ -155,13 +160,25 @@
 
 <!-- Shorten Order Modal -->
 <div id="shorten-order-modal" class="modal" style="z-index: 1010;">
-    <div class="modal-content" style="max-width: 450px;">
+    <div class="modal-content" style="max-width: 500px;">
         <div class="modal-header">
-            <h2 class="modal-title">Pokrátit objednávku</h2>
+            <h2 class="modal-title" id="shorten-order-title">Pokrátit objednávku</h2>
             <button class="btn-icon" data-action="close-modal"><i data-feather="x"></i></button>
         </div>
         <div class="modal-body" id="shorten-order-body">
-            <!-- JS Generated Content -->
+            <div id="shorten-order-calculation" class="card" style="padding: 15px; margin-bottom: 20px; background-color: var(--bg-tertiary);">
+                <!-- Calculation results will go here by JS -->
+            </div>
+            <div class="form-group">
+                <p>Původní objednávka: <strong id="shorten-order-original-amount">...</strong></p>
+            </div>
+            <div class="form-group">
+                <label for="shorten-order-new-amount">Nový počet beden</label>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="number" id="shorten-order-new-amount" min="0" style="flex-grow: 1;">
+                    <button class="btn btn-secondary" id="apply-suggested-boxes-btn">Použít navrhované</button>
+                </div>
+            </div>
         </div>
         <div class="modal-footer">
             <button class="btn btn-secondary" data-action="close-modal">Zrušit</button>

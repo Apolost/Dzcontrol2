@@ -8,6 +8,131 @@ import { DOMElements, ICONS, showConfirmation, showToast } from '../ui.ts';
 import { generateId, getWeekNumber } from '../utils.ts';
 import { renderDailyPlan } from './dailyPlan.ts';
 
+function getActionRawMaterialNeeds(action, dateStr) {
+    const dayCountData = action.dailyCounts?.[dateStr];
+    const boxCount = (typeof dayCountData === 'object' ? dayCountData.boxCount : dayCountData) || 0;
+
+    if (boxCount === 0) {
+        return { text: '', totalKg: 0 };
+    }
+
+    const productSurovina = appState.suroviny.find(s => s.id === action.surovinaId);
+    if (!productSurovina) {
+        return { text: '', totalKg: 0 };
+    }
+
+    // Planned actions are always VL
+    const boxWeightInGrams = appState.boxWeights[action.customerId]?.[action.surovinaId]?.VL || (productSurovina.boxWeight * 1000) || 10000;
+    const totalWeightKg = boxCount * (boxWeightInGrams / 1000);
+
+    const needs = [];
+
+    if (productSurovina.isProduct) {
+        const productDef = appState.products.find(p => p.id === productSurovina.id);
+        if (productDef && productDef.surovinaId) {
+            const baseSurovina = appState.suroviny.find(s => s.id === productDef.surovinaId);
+            if (baseSurovina) {
+                let usableMeatWeight = totalWeightKg;
+                if (productDef.marinadePercent > 0) {
+                    usableMeatWeight /= (1 + (productDef.marinadePercent || 0) / 100);
+                }
+                let rawMaterialWeight = usableMeatWeight;
+                if (productDef.lossPercent > 0) {
+                    rawMaterialWeight /= (1 - (productDef.lossPercent || 0) / 100);
+                }
+                needs.push({ name: baseSurovina.name, kg: rawMaterialWeight });
+            }
+        }
+    } else if (productSurovina.isMix) {
+        const mixDef = appState.mixDefinitions[productSurovina.id];
+        if (mixDef && mixDef.components) {
+            mixDef.components.forEach(comp => {
+                const componentSurovina = appState.suroviny.find(s => s.id === comp.surovinaId);
+                if (componentSurovina) {
+                    const componentWeight = totalWeightKg * (comp.percentage / 100);
+                    needs.push({ name: componentSurovina.name, kg: componentWeight });
+                }
+            });
+        }
+    } else { // It's a base surovina
+        needs.push({ name: productSurovina.name, kg: totalWeightKg });
+    }
+
+    if (needs.length === 0) {
+        return { text: '', totalKg: 0 };
+    }
+
+    const totalKg = needs.reduce((sum, item) => sum + item.kg, 0);
+
+    if (needs.length === 1) {
+        return { text: `${needs[0].kg.toFixed(2)} kg ${needs[0].name}`, totalKg: needs[0].kg };
+    } else {
+        const text = needs.map(n => `${n.name}: ${n.kg.toFixed(1)}kg`).join(', ');
+        return { text, totalKg };
+    }
+}
+
+
+function renderActionsList() {
+    const { year, month } = appState.ui.calendar;
+    const container = document.getElementById('actions-list-container');
+    if (!container) return;
+
+    const firstDayOfMonth = new Date(year, month, 1);
+    const lastDayOfMonth = new Date(year, month + 1, 0);
+
+    const actionsForMonth = [];
+
+    appState.plannedActions.forEach(action => {
+        // Iterate through each day of the month to see if the action applies
+        for (let d = new Date(firstDayOfMonth); d <= lastDayOfMonth; d.setDate(d.getDate() + 1)) {
+            const dateStr = d.toISOString().split('T')[0];
+            const dateIsInRange = dateStr >= action.startDate && (!action.endDate || dateStr <= action.endDate);
+            
+            if (dateIsInRange) {
+                const dayCountData = action.dailyCounts?.[dateStr];
+                const boxCount = (typeof dayCountData === 'object' ? dayCountData.boxCount : dayCountData) || 0;
+                
+                if (boxCount > 0) {
+                    const { text: needsText } = getActionRawMaterialNeeds(action, dateStr);
+                    actionsForMonth.push({
+                        date: dateStr,
+                        boxCount: boxCount,
+                        customer: appState.zakaznici.find(c => c.id === action.customerId),
+                        surovina: appState.suroviny.find(s => s.id === action.surovinaId),
+                        needsText: needsText
+                    });
+                }
+            }
+        }
+    });
+
+    // Sort by date
+    actionsForMonth.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    if (actionsForMonth.length === 0) {
+        container.innerHTML = '<p style="font-size: 0.9rem; color: var(--text-secondary); text-align: center; padding: 20px 0;">Tento měsíc nejsou žádné akce.</p>';
+        return;
+    }
+
+    container.innerHTML = actionsForMonth.map(action => {
+        const dateFormatted = new Date(action.date + 'T00:00:00').toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' });
+        return `
+            <div class="action-list-item">
+                <div class="action-list-item-header">
+                    ${action.customer?.name || '?'} - ${action.surovina?.name || '?'}
+                </div>
+                <div class="action-list-item-details">
+                    <span>${dateFormatted}</span>
+                    <span style="font-weight: 500;">${action.boxCount} beden</span>
+                </div>
+                ${action.needsText ? `<div class="action-list-item-needs">${action.needsText}</div>` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+
 export function changeMonth(delta) {
     appState.ui.calendar.month += delta;
     if (appState.ui.calendar.month > 11) {
@@ -59,13 +184,24 @@ export function renderCalendar() {
             
             dayActions.forEach(action => {
                 const customer = appState.zakaznici.find(c => c.id === action.customerId);
-                itemsDiv.innerHTML += `<div class="day-pill">${customer?.name || '?'} (Akce)</div>`;
+                const dayCountData = action.dailyCounts?.[dateStr];
+                const boxCount = (typeof dayCountData === 'object' ? dayCountData.boxCount : dayCountData) || 0;
+
+                if (boxCount > 0) {
+                    const { totalKg } = getActionRawMaterialNeeds(action, dateStr);
+                    itemsDiv.innerHTML += `
+                        <div class="day-pill">
+                            <span>${customer?.name || '?'} (${boxCount}b)</span>
+                            ${totalKg > 0 ? `<span class="day-pill-kg">${totalKg.toFixed(0)} kg</span>` : ''}
+                        </div>`;
+                }
             });
 
             grid.appendChild(dayCell);
             currentDate.setDate(currentDate.getDate() + 1);
         }
     }
+    renderActionsList();
 }
 
 export function openPlanActionModal(actionId = null) {

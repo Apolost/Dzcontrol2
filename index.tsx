@@ -5,7 +5,7 @@
 
 // @ts-nocheck
 import { loadState, startAutoSave, isDirty, markAsDirty } from './js/state.ts';
-import { bindEvents, render, startClock, updateInfoBar } from './js/main.ts';
+import { bindEvents, render, startClock, updateInfoBar, initializeNotificationInterval } from './js/main.ts';
 import { initializeDOMElements } from './js/ui.ts';
 
 async function loadModals() {
@@ -45,12 +45,28 @@ async function loadModals() {
 
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // --- SPLASH SCREEN LOGIC ---
+    const splashScreen = document.getElementById('splash-screen');
+    if (splashScreen) {
+        // After 6 seconds, start fade out
+        setTimeout(() => {
+            splashScreen.classList.add('fade-out');
+            
+            // After fade out animation completes (500ms), hide it completely
+            splashScreen.addEventListener('transitionend', () => {
+                splashScreen.style.display = 'none';
+            }, { once: true });
+
+        }, 6000);
+    }
+
     // --- APP INITIALIZATION ---
     await loadModals();
     initializeDOMElements(); // Populate DOM element references now that modals are loaded
     loadState();
     bindEvents();
     startClock();
+    initializeNotificationInterval(); // Start checking for shortages periodically
     setInterval(updateInfoBar, 5000); // Update info bar every 5 seconds
     startAutoSave();
     render();

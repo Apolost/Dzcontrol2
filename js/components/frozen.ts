@@ -8,9 +8,55 @@ import { appState, saveState } from '../state.ts';
 import { DOMElements, ICONS, showToast, showConfirmation } from '../ui.ts';
 import { generateId } from '../utils.ts';
 
+let frozenProductionInputHandler = null;
+
 export function openFrozenMainModal() {
     renderFrozenProductionList();
-    DOMElements.frozenMainModal.classList.add('active');
+    const modal = DOMElements.frozenMainModal;
+    modal.classList.add('active');
+
+    const body = modal.querySelector('#frozen-main-modal-body');
+
+    // To avoid attaching multiple listeners, remove old one if it exists
+    if (frozenProductionInputHandler) {
+        body.removeEventListener('input', frozenProductionInputHandler);
+    }
+
+    frozenProductionInputHandler = (e) => {
+        if (e.target.classList.contains('frozen-daily-production-input')) {
+            const row = e.target.closest('tr');
+            const orderId = e.target.dataset.orderId;
+            const order = appState.frozenProductionOrders.find(o => o.id === orderId);
+            const product = appState.frozenProducts.find(p => p.id === order.frozenProductId);
+            if (!order || !product) return;
+
+            const totalCartonsRequired = product.cartonWeightKg > 0 ? Math.ceil(order.totalKgRequired / product.cartonWeightKg) : 0;
+
+            let totalCartonsProduced = 0;
+            // Get other days' production
+            for (const dateKey in order.dailyProduction) {
+                if (dateKey !== appState.ui.selectedDate) {
+                    totalCartonsProduced += order.dailyProduction[dateKey] || 0;
+                }
+            }
+            // Add today's input value
+            totalCartonsProduced += parseInt(e.target.value, 10) || 0;
+
+            const cartonsRemaining = totalCartonsRequired - totalCartonsProduced;
+
+            const remainingCell = row.querySelector('td:nth-last-child(2)');
+            remainingCell.textContent = cartonsRemaining;
+            remainingCell.className = cartonsRemaining > 0 ? 'shortage' : 'surplus';
+
+            if (cartonsRemaining <= 0) {
+                row.classList.add('done');
+            } else {
+                row.classList.remove('done');
+            }
+        }
+    };
+
+    body.addEventListener('input', frozenProductionInputHandler);
 }
 
 function renderFrozenProductionList() {
@@ -116,42 +162,65 @@ export function saveFrozenRequest() {
     renderFrozenProductionList();
 }
 
-export function handleDailyProductionInput(target) {
-    const orderId = target.dataset.orderId;
-    const producedToday = parseInt(target.value, 10) || 0;
+export function saveFrozenProduction() {
     const date = appState.ui.selectedDate;
+    let changesMade = 0;
+    let completedOrdersInfo = [];
 
-    const order = appState.frozenProductionOrders.find(o => o.id === orderId);
-    if (!order) return;
+    document.querySelectorAll('#frozen-main-modal .frozen-daily-production-input').forEach(input => {
+        const orderId = input.dataset.orderId;
+        const producedToday = parseInt(input.value, 10) || 0;
+        
+        const order = appState.frozenProductionOrders.find(o => o.id === orderId);
+        if (!order) return;
 
-    if (!order.dailyProduction) {
-        order.dailyProduction = {};
-    }
-    order.dailyProduction[date] = producedToday;
+        if (!order.dailyProduction) {
+            order.dailyProduction = {};
+        }
+        
+        const oldProduction = order.dailyProduction[date] || 0;
+        if (oldProduction !== producedToday) {
+            changesMade++;
+            order.dailyProduction[date] = producedToday;
 
-    // Check for completion
-    const product = appState.frozenProducts.find(p => p.id === order.frozenProductId);
-    if (product && !order.isComplete) {
-        const totalCartonsRequired = Math.ceil(order.totalKgRequired / product.cartonWeightKg);
-        const totalCartonsProduced = Object.values(order.dailyProduction).reduce((sum, count) => sum + count, 0);
+            // Check for completion ONLY if it was not complete before and now might be
+            const product = appState.frozenProducts.find(p => p.id === order.frozenProductId);
+            if (product && !order.isComplete) {
+                const totalCartonsRequired = Math.ceil(order.totalKgRequired / product.cartonWeightKg);
+                const totalCartonsProduced = Object.values(order.dailyProduction).reduce((sum, count) => sum + count, 0);
 
-        if (totalCartonsProduced >= totalCartonsRequired) {
-            // Production is complete, deduct raw materials
-            const rawMaterial = appState.suroviny.find(s => s.id === product.rawMaterialId);
-            if (rawMaterial && rawMaterial.paletteWeight > 0) {
-                const palettesToDeduct = order.totalKgRequired / rawMaterial.paletteWeight;
-                rawMaterial.stock = (rawMaterial.stock || 0) - palettesToDeduct;
-                order.isComplete = true; // Mark as complete to prevent double deduction
-                
-                showToast(`Výroba pro "${product.name}" dokončena. ${palettesToDeduct.toFixed(2)} palet suroviny "${rawMaterial.name}" bylo odepsáno ze skladu.`, 'success');
-            } else {
-                 showToast(`Výroba pro "${product.name}" dokončena, ale surovina nebyla nalezena nebo nemá váhu palety. Zkontrolujte nastavení.`, 'warning');
+                if (totalCartonsProduced >= totalCartonsRequired) {
+                    const rawMaterial = appState.suroviny.find(s => s.id === product.rawMaterialId);
+                    if (rawMaterial && rawMaterial.paletteWeight > 0) {
+                        const palettesToDeduct = order.totalKgRequired / rawMaterial.paletteWeight;
+                        rawMaterial.stock = (rawMaterial.stock || 0) - palettesToDeduct;
+                        order.isComplete = true;
+                        
+                        completedOrdersInfo.push(`Výroba pro "${product.name}" dokončena. ${palettesToDeduct.toFixed(2)} palet suroviny "${rawMaterial.name}" odepsáno.`);
+                    } else {
+                         completedOrdersInfo.push(`Výroba pro "${product.name}" dokončena, ale surovina nebyla nalezena nebo nemá váhu palety. Zkontrolujte nastavení.`);
+                    }
+                }
             }
         }
-    }
+    });
 
-    saveState();
-    // No need to re-render the whole list on input, just save the state
+    if (changesMade > 0) {
+        saveState();
+        showToast('Změny ve výrobě mražených produktů uloženy.');
+        
+        completedOrdersInfo.forEach(info => {
+            if (info.includes('dokončena, ale')) {
+                showToast(info, 'warning');
+            } else {
+                showToast(info, 'success');
+            }
+        });
+
+        renderFrozenProductionList();
+    } else {
+        showToast('Nebyly provedeny žádné změny k uložení.', 'info');
+    }
 }
 
 export function deleteFrozenOrder(orderId) {

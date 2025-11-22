@@ -13,6 +13,74 @@ let lastCalibrationAlertCount = 0;
 let lastShortageCount = 0;
 let lastRenderedDateForAlerts = null;
 
+function getItemBaseMaterialInfo(orderItem, customerId) {
+    const itemSurovina = appState.suroviny.find(s => s.id === orderItem.surovinaId);
+    if (!itemSurovina) return [];
+
+    const date = appState.ui.selectedDate;
+    const tempWeightKey = `${customerId}_${itemSurovina.id}_${orderItem.type}`;
+    const tempWeight = appState.temporaryBoxWeights?.[date]?.[tempWeightKey];
+    const weights = appState.boxWeights[customerId]?.[itemSurovina.id];
+    let defaultWeight = 10000;
+    if (itemSurovina.isProduct) {
+        const productDef = appState.products.find(p => p.id === itemSurovina.id);
+        defaultWeight = productDef?.boxWeight || 10000;
+    } else {
+        defaultWeight = (weights?.VL) ?? 10000;
+    }
+    const boxWeightInGrams = tempWeight !== undefined ? tempWeight : (weights?.[orderItem.type] ?? defaultWeight);
+
+    const totalItemKg = orderItem.boxCount * (boxWeightInGrams / 1000);
+
+    const materials = [];
+
+    if (itemSurovina.isProduct) {
+        const productDef = appState.products.find(p => p.id === itemSurovina.id);
+        if (productDef && productDef.surovinaId) {
+            const baseSurovina = appState.suroviny.find(s => s.id === productDef.surovinaId);
+            if (baseSurovina) {
+                let usableMeatWeight = totalItemKg;
+                if (productDef.marinadePercent > 0) {
+                    usableMeatWeight /= (1 + (productDef.marinadePercent || 0) / 100);
+                }
+                let rawMaterialWeight = usableMeatWeight;
+                if (productDef.lossPercent > 0) {
+                    rawMaterialWeight /= (1 - (productDef.lossPercent || 0) / 100);
+                }
+                materials.push({ surovinaId: baseSurovina.id, name: baseSurovina.name, requiredKg: rawMaterialWeight });
+            }
+        }
+    } else if (itemSurovina.isMix) {
+        const mixDef = appState.mixDefinitions[itemSurovina.id];
+        if (mixDef && mixDef.components) {
+            mixDef.components.forEach(comp => {
+                const componentSurovina = appState.suroviny.find(s => s.id === comp.surovinaId);
+                if (componentSurovina) {
+                    const componentWeight = totalItemKg * (comp.percentage / 100);
+                    materials.push({ surovinaId: componentSurovina.id, name: componentSurovina.name, requiredKg: componentWeight });
+                }
+            });
+        }
+    } else { // It's a base surovina
+        materials.push({ surovinaId: itemSurovina.id, name: itemSurovina.name, requiredKg: totalItemKg });
+    }
+    return materials;
+}
+
+
+function getContainerIdForSurovina(surovinaName) {
+    const name = surovinaName.toUpperCase();
+    if (name.includes('ŠPÍZ')) return 'main-page-spizy-container';
+    if (name === 'ŘÍZKY') return 'main-page-rizky-container';
+    if (name === 'MLETÉ MASO') return 'main-page-minced-meat-container';
+    if (name === 'STEAK') return 'main-page-steak-container';
+    if (name === 'HORNÍ STEHNA' || name === 'SPODNÍ STEHNA') return 'main-page-horni-spodni-container';
+    if (name === 'STEHNA') return 'main-page-stehna-container';
+    if (name === 'PRSA') return 'main-page-prsa-container';
+    if (name === 'ČTVRTKY') return 'main-page-ctvrtky-container';
+    return null;
+}
+
 
 function getPendingCountForSurovina(date, surovinaName) {
     const targetSurovina = appState.suroviny.find(s => s.name.toUpperCase() === surovinaName.toUpperCase());
@@ -247,9 +315,8 @@ export function renderMainPage() {
     const spizyContainer = document.getElementById('main-page-spizy');
     const date = appState.ui.selectedDate;
     
-    // Section 1: Alerts with Integrated Yield Calculation
     alertsContainer.innerHTML = '';
-    surplusContainer.innerHTML = ''; // This section is now integrated into alerts
+    surplusContainer.innerHTML = ''; 
     let hasAlerts = false;
     let currentShortageCount = 0;
 
@@ -259,7 +326,7 @@ export function renderMainPage() {
     const yieldMap = new Map(yieldData.map(d => [d.name.toUpperCase().replace(' (SKELETY)', ''), d]));
     const hasProduction = calculationResults.totals.totalWeight > 0;
     
-    const todayNeeds = getDailyNeeds(appState.ui.selectedDate, 'non-kfc');
+    const todayNeeds = getDailyNeeds(appState.ui.selectedDate);
     const maykawaThighsNeeded = getMaykawaThighsNeeded(appState.ui.selectedDate);
     if (maykawaThighsNeeded > 0) {
          const thighsSurovina = appState.suroviny.find(s => s.name.toUpperCase() === 'STEHNA');
@@ -267,7 +334,47 @@ export function renderMainPage() {
             todayNeeds[thighsSurovina.id] = (todayNeeds[thighsSurovina.id] || 0) + maykawaThighsNeeded;
          }
     }
+    
+    // --- NEW: Old Stock Leftover Alert ---
+    const leftoverStockAlerts = [];
+    appState.suroviny.filter(s => s.isActive && !s.isMix && !s.isProduct).forEach(s => {
+        const neededKg = todayNeeds[s.id] || 0;
+        const paletteStockKg = (s.stock || 0) * (s.paletteWeight || 0);
+        const boxStockKg = (appState.dailyStockAdjustments[date]?.[s.id] || 0) * (s.boxWeight || 25);
+        const stockFromWarehouseKg = paletteStockKg + boxStockKg;
 
+        if (stockFromWarehouseKg > neededKg) {
+            const leftoverKg = stockFromWarehouseKg - neededKg;
+            const paletteWeight = s.paletteWeight || 500;
+            const boxWeight = s.boxWeight || 25;
+
+            const leftoverPallets = paletteWeight > 0 ? Math.floor(leftoverKg / paletteWeight) : 0;
+            const remainingKgForBoxes = paletteWeight > 0 ? leftoverKg % paletteWeight : leftoverKg;
+            const leftoverBoxes = boxWeight > 0 ? Math.round(remainingKgForBoxes / boxWeight) : 0;
+
+            if (leftoverKg > 0.1) {
+                leftoverStockAlerts.push(`
+                    <div style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px; border-radius: 8px; background-color: color-mix(in srgb, var(--accent-primary) 10%, transparent);">
+                         <i data-feather="archive" style="color: var(--accent-primary);"></i>
+                         <span>Zůstane staré maso <strong>${s.name}</strong>: ${leftoverPallets} palet a ${leftoverBoxes} beden.</span>
+                    </div>
+                `);
+            }
+        }
+    });
+
+    if (leftoverStockAlerts.length > 0) {
+        hasAlerts = true;
+        alertsContainer.innerHTML += `
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
+              ${leftoverStockAlerts.join('')}
+          </div>
+        `;
+    }
+
+
+    // --- Section 1: Shortage Alerts ---
+    const shortageAlerts = [];
     // Pre-calculate balances for interdependent materials
     const prsaSurovina = appState.suroviny.find(s => s.name.toUpperCase() === 'PRSA');
     const prsaStockKg = prsaSurovina ? ((prsaSurovina.stock || 0) * (prsaSurovina.paletteWeight || 0) + (appState.dailyStockAdjustments[date]?.[prsaSurovina.id] || 0) * (prsaSurovina.boxWeight || 25)) : 0;
@@ -343,12 +450,12 @@ export function renderMainPage() {
             if (isCovered && hasProduction) {
                 const stockShortageKg = neededKg - stockKg;
                 const stockShortagePalettes = s.paletteWeight > 0 ? stockShortageKg / s.paletteWeight : 0;
-                alertMessage = `Chybí ${stockShortagePalettes.toFixed(2)} palet ${s.name} (lze pokrýt z linky)`;
+                alertMessage = `Chybí ${stockShortagePalettes.toFixed(2)} palet`;
                 icon = `<i data-feather="check-circle" style="color: var(--accent-success);"></i>`;
             } else {
                 currentShortageCount++;
                 const finalShortagePalettes = s.paletteWeight > 0 ? finalShortageKg / s.paletteWeight : 0;
-                alertMessage = `Chybí ${finalShortagePalettes.toFixed(2)} palet ${s.name}`;
+                alertMessage = `Chybí ${finalShortagePalettes.toFixed(2)} palet`;
                 icon = `<i data-feather="x-circle" style="color: var(--accent-danger);"></i>`;
             }
             
@@ -356,27 +463,45 @@ export function renderMainPage() {
             let adjustButton = '';
             if (isCoveredByProduction) {
                  adjustButton = `
-                    <button class="btn btn-secondary" style="margin-left: auto; padding: 4px 10px; font-size: 0.8rem;" data-action="open-single-stock-adjustment" data-surovina-id="${s.id}">
+                    <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.8rem;" data-action="open-single-stock-adjustment" data-surovina-id="${s.id}">
                         Sklad
                     </button>
                 `;
             } else {
                  adjustButton = `
-                    <button class="btn btn-secondary" style="margin-left: 10px; padding: 4px 10px; font-size: 0.8rem;" data-action="open-surovina-shortage-modal" data-surovina-id="${s.id}">
-                        ${ICONS.list} Seznam
+                    <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.8rem;" data-action="open-surovina-shortage-modal" data-surovina-id="${s.id}">
+                        Sklad
                     </button>
-                    <button class="btn btn-secondary" style="margin-left: auto; padding: 4px 10px; font-size: 0.8rem;" data-action="open-temp-weight-modal" data-surovina-id="${s.id}">
-                        Upravit váhu
+                    <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.8rem;" data-action="open-surovina-shortage-modal" data-surovina-id="${s.id}">
+                        Pokrátit
                     </button>
                 `;
             }
             
-            alertsContainer.innerHTML += `<div class="${isCoveredByProduction ? 'surplus' : 'shortage'}" style="display: flex; align-items: center; gap: 8px; width: 100%;">
-                <span style="display: flex; align-items: center; gap: 8px;">${icon} ${alertMessage}</span>
-                ${adjustButton}
-            </div>`;
+            shortageAlerts.push(`
+                <div class="shortage-card ${isCoveredByProduction ? 'is-covered' : ''}">
+                    <div class="shortage-card-header">
+                        ${icon}
+                        <h4>${s.name}</h4>
+                    </div>
+                    <div class="shortage-card-body">
+                        <p>${alertMessage}</p>
+                    </div>
+                    <div class="shortage-card-footer">
+                        ${adjustButton}
+                    </div>
+                </div>
+            `);
         }
     });
+
+    if (shortageAlerts.length > 0) {
+        alertsContainer.innerHTML += `
+            <div class="shortage-grid">
+                ${shortageAlerts.join('')}
+            </div>
+        `;
+    }
 
 
     // Spizy suroviny alerts (these don't come from the line)
@@ -446,7 +571,7 @@ export function renderMainPage() {
     lastShortageCount = currentShortageCount;
 
     if (!hasAlerts) {
-        alertsContainer.innerHTML = '<p>Žádné nedostatky surovin.</p>';
+        alertsContainer.innerHTML = '<p>Žádné nedostatky surovin ani jiná upozornění.</p>';
     }
 
     renderCalibrationAlerts(alertsContainer);
@@ -777,6 +902,20 @@ export async function toggleSpizyDone(target) {
         order[key] = !order[key];
         saveState();
         await render();
+
+        // Check if the spizy accordion should be closed
+        const detailsElement = document.getElementById('main-page-spizy-container');
+        if (detailsElement && detailsElement.open) {
+            const allSpizyDone = (appState.spizyOrders[date] || []).every(o => {
+                const klobasaOk = o.klobasa === 0 || o.klobasaIsDone;
+                const spekOk = o.spek === 0 || o.spekIsDone;
+                const cilliOk = o.cilli === 0 || o.cilliIsDone;
+                return klobasaOk && spekOk && cilliOk;
+            });
+            if (allSpizyDone) {
+                detailsElement.open = false;
+            }
+        }
     }
 }
 
@@ -808,7 +947,7 @@ function updateStockForOrderItem(item, customerId, factor) {
                 }
                 let rawMaterialWeight = usableMeatWeight;
                 if (productDef.lossPercent > 0) {
-                    rawMaterialWeight /= (1 - productDef.lossPercent / 100);
+                    rawMaterialWeight /= (1 - ((productDef.lossPercent || 0) / 100));
                 }
                 materialsToUpdate.push({ surovina: baseSurovina, kg: rawMaterialWeight });
             }
@@ -847,6 +986,8 @@ export async function toggleMainPageOrderItemDone(target) {
     if (item) {
         const isMarkingDone = item.doneCount < item.boxCount;
         const factor = isMarkingDone ? -1 : 1; // -1 to remove from stock, 1 to add back
+        
+        const surovina = appState.suroviny.find(s => s.id === item.surovinaId);
 
         // Update stock before changing doneCount
         updateStockForOrderItem(item, order.customerId, factor);
@@ -861,6 +1002,22 @@ export async function toggleMainPageOrderItemDone(target) {
         saveState();
         showToast(isMarkingDone ? 'Položka označena jako hotová a suroviny odečteny.' : 'Označení zrušeno a suroviny vráceny na sklad.');
         await render();
+        
+        // NEW LOGIC: Check if accordion can be closed
+        if (surovina) {
+            const containerId = getContainerIdForSurovina(surovina.name);
+            if (containerId) {
+                const detailsElement = document.getElementById(containerId);
+                if (detailsElement && detailsElement.open) {
+                    const allRows = detailsElement.querySelectorAll('tbody tr');
+                    // Check if there are any rows and if all of them have the 'done' class
+                    const allDone = allRows.length > 0 && Array.from(allRows).every(row => row.classList.contains('done'));
+                    if (allDone) {
+                        detailsElement.open = false;
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1009,18 +1166,20 @@ export function openPreProductionModal(days = 5) {
     feather.replace();
 }
 
-export function produceFromPlan(target) {
-    const { actionId, date } = target.dataset;
-    const input = document.getElementById(`produce-count-${actionId}-${date}`);
+export async function produceFromPlan(target) {
+    const { actionId, date: futureDate } = target.dataset;
+    const currentDate = appState.ui.selectedDate;
+
+    const input = document.getElementById(`produce-count-${actionId}-${futureDate}`);
     const action = appState.plannedActions.find(a => a.id === actionId);
     if (!action || !input) return;
 
-    const dayCountData = action.dailyCounts[date];
+    const dayCountData = action.dailyCounts[futureDate];
     const remainingBoxes = (dayCountData.boxCount || 0) - (dayCountData.producedCount || 0);
     let boxesToProduce = parseInt(input.value);
 
     if (isNaN(boxesToProduce) || boxesToProduce <= 0) {
-        boxesToProduce = remainingBoxes; // If input is empty, produce all remaining
+        boxesToProduce = remainingBoxes;
     }
 
     if (boxesToProduce > remainingBoxes) {
@@ -1028,13 +1187,13 @@ export function produceFromPlan(target) {
         return;
     }
 
-    // 1. Update planned action
+    // 1. Update planned action on the future date
     dayCountData.producedCount += boxesToProduce;
 
-    // 2. Add to standard orders
-    let order = appState.orders.find(o => o.customerId === action.customerId && o.date === date);
+    // 2. Add a completed order item to the CURRENT day's orders
+    let order = appState.orders.find(o => o.customerId === action.customerId && o.date === currentDate);
     if (!order) {
-        order = { id: generateId(), date: date, customerId: action.customerId, items: [] };
+        order = { id: generateId(), date: currentDate, customerId: action.customerId, items: [] };
         appState.orders.push(order);
     }
 
@@ -1051,16 +1210,28 @@ export function produceFromPlan(target) {
         order.items.push(item);
     }
 
-    // Add to boxCount and mark as done
+    // Add to boxCount and mark as done to consume raw materials today
     item.boxCount += boxesToProduce;
     item.doneCount += boxesToProduce;
 
     saveState();
-    showToast(`${boxesToProduce} beden vyrobeno a přidáno do objednávek.`, 'success');
+    showToast(`${boxesToProduce} beden vyrobeno a surovina započtena na den ${new Date(currentDate+'T00:00:00').toLocaleDateString('cs-CZ')}.`, 'success');
 
     const activeDaysButton = document.querySelector('#pre-production-modal .btn-group .btn.active');
     const days = activeDaysButton ? parseInt(activeDaysButton.dataset.days, 10) : 5;
+
+    await render(); 
+
     openPreProductionModal(days);
+    
+    const modal = DOMElements.preProductionModal;
+    if (modal) {
+        modal.querySelectorAll('.btn-group .btn').forEach(btn => btn.classList.remove('active'));
+        const newActiveButton = modal.querySelector(`.btn-group .btn[data-days="${days}"]`);
+        if (newActiveButton) {
+            newActiveButton.classList.add('active');
+        }
+    }
 }
 
 export function openTempWeightModal(target) {
@@ -1187,7 +1358,7 @@ export function openTempWeightModal(target) {
     `;
 
     const tableContainer = modal.querySelector('#temp-weight-items-container');
-    let tableHTML = `<table class="data-table"><thead><tr><th>Zákazník</th><th>Produkt</th><th>Typ</th><th>Pův. váha (g)</th><th>Nová váha (g)</th></tr></thead><tbody>`;
+    let tableHTML = `<table class="data-table"><thead><tr><th>Použít</th><th>Zákazník</th><th>Produkt</th><th>Typ</th><th>Pův. váha (g)</th><th>Nová váha (g)</th></tr></thead><tbody>`;
 
     affectedItems.forEach(item => {
         const customer = appState.zakaznici.find(c => c.id === item.customerId);
@@ -1202,6 +1373,7 @@ export function openTempWeightModal(target) {
 
         tableHTML += `
             <tr data-customer-id="${item.customerId}" data-surovina-id="${item.surovinaId}" data-type="${item.type}">
+                <td><input type="checkbox" class="apply-suggested-checkbox" style="width: 18px; height: 18px;"></td>
                 <td>${customer?.name || '?'}</td>
                 <td>${itemSurovina?.name || '?'}</td>
                 <td>${item.type}</td>
@@ -1221,18 +1393,29 @@ export function openTempWeightModal(target) {
 export function applySuggestedWeight(target) {
     const modal = target.closest('.modal');
     let appliedCount = 0;
-    modal.querySelectorAll('.temp-weight-input').forEach(input => {
-        const suggestedWeight = input.dataset.suggestedWeight;
-        if (suggestedWeight) {
-            input.value = suggestedWeight;
-            appliedCount++;
+    const checkboxes = modal.querySelectorAll('.apply-suggested-checkbox:checked');
+
+    if (checkboxes.length === 0) {
+        showToast('Nejprve zaškrtněte řádky, na které chcete aplikovat navrhovanou váhu.', 'warning');
+        return;
+    }
+
+    checkboxes.forEach(checkbox => {
+        const row = checkbox.closest('tr');
+        const input = row.querySelector('.temp-weight-input');
+        if (input) {
+            const suggestedWeight = input.dataset.suggestedWeight;
+            if (suggestedWeight) {
+                input.value = suggestedWeight;
+                appliedCount++;
+            }
         }
     });
 
     if (appliedCount > 0) {
-        showToast('Navrhovaná váha byla aplikována.');
+        showToast(`Navrhovaná váha byla aplikována na ${appliedCount} řádků.`);
     } else {
-        showToast('Nebylo co aplikovat.', 'error');
+        showToast('Pro vybrané řádky nebyla nalezena žádná navrhovaná váha.', 'error');
     }
 }
 
@@ -1271,8 +1454,11 @@ export function openSurovinaShortageModal(surovinaId) {
     const modal = DOMElements.surovinaShortageModal;
     const surovina = appState.suroviny.find(s => s.id === surovinaId);
     if (!surovina) return;
+    
+    modal.dataset.surovinaId = surovinaId;
 
     modal.querySelector('#surovina-shortage-title').textContent = `Řešení nedostatku: ${surovina.name}`;
+    modal.querySelector('#surovina-shortage-adjust-weight-btn').dataset.surovinaId = surovinaId;
     
     const date = appState.ui.selectedDate;
     const stockPallets = surovina.stock || 0;
@@ -1416,28 +1602,75 @@ export function markShortageItemDone(orderId, itemId) {
 
 export function openShortenOrderModal(orderId, itemId) {
     const modal = DOMElements.shortenOrderModal;
-    const body = modal.querySelector('#shorten-order-body');
     const order = appState.orders.find(o => o.id === orderId);
     const item = order?.items.find(i => i.id === itemId);
+
+    if (!order || !item) {
+        showToast('Položka objednávky nenalezena.', 'error');
+        return;
+    }
     
-    if (!item) return;
+    const shortageSurovinaId = DOMElements.surovinaShortageModal.dataset.surovinaId;
+    if (!shortageSurovinaId) {
+        showToast('Nelze určit chybějící surovinu. Zkuste to znovu.', 'error');
+        return;
+    }
+    const shortageSurovina = appState.suroviny.find(s => s.id === shortageSurovinaId);
+
+    const date = appState.ui.selectedDate;
     
+    // 1. Calculate Total Available
+    const stockKg = (shortageSurovina.stock || 0) * (shortageSurovina.paletteWeight || 0) 
+                  + (appState.dailyStockAdjustments[date]?.[shortageSurovinaId] || 0) * (shortageSurovina.boxWeight || 25);
+    
+    const calculationResults = calculateTimeline(date);
+    const dailyData = appState.chickenCounts[date];
+    const { yieldData } = calculateYieldData(date, dailyData?.flocks, calculationResults.totals.totalWeight);
+    
+    let productionKg = 0;
+    const yieldInfo = yieldData.find(d => d.name.toUpperCase().replace(' (SKELETY)', '') === shortageSurovina.name.toUpperCase().replace(' (SKELETY)', ''));
+    if (yieldInfo) {
+        productionKg = yieldInfo.produced || 0;
+    }
+    const totalAvailableKg = stockKg + productionKg;
+
+    // 2. Calculate Total Needed for this specific surovina across all orders for the day
+    const allNeeds = getDailyNeeds(date, null, true); // true to get total demand regardless of production status
+    const totalNeededKg = allNeeds[shortageSurovinaId] || 0;
+    
+    // 3. Calculate suggestion
+    const deficitKg = totalNeededKg > totalAvailableKg ? totalNeededKg - totalAvailableKg : 0;
+    const coverageRatio = totalNeededKg > 0 ? Math.min(1, totalAvailableKg / totalNeededKg) : 1;
+    const suggestedBoxCount = Math.floor(item.boxCount * coverageRatio);
+
+    // --- UPDATE MODAL UI ---
     modal.dataset.orderId = orderId;
     modal.dataset.itemId = itemId;
 
-    const originalBoxCount = item.boxCount;
-    body.innerHTML = `
-        <div class="form-group">
-            <p>Původní objednávka: <strong>${originalBoxCount} beden</strong></p>
-        </div>
-        <div class="form-group">
-            <label for="shorten-order-new-amount">Nový počet beden</label>
-            <input type="number" id="shorten-order-new-amount" value="${originalBoxCount}" min="0" max="${originalBoxCount}">
-        </div>
+    const itemSurovina = appState.suroviny.find(s => s.id === item.surovinaId);
+    modal.querySelector('#shorten-order-title').textContent = `Pokrátit: ${itemSurovina.name}`;
+    
+    const calcContainer = modal.querySelector('#shorten-order-calculation');
+    calcContainer.innerHTML = `
+        <p>Celkem dostupné <strong>${shortageSurovina.name}</strong>: <strong>${totalAvailableKg.toFixed(2)} kg</strong> (Sklad: ${stockKg.toFixed(2)} + Výroba: ${productionKg.toFixed(2)})</p>
+        <p>Celková potřeba na všechny objednávky: <strong>${totalNeededKg.toFixed(2)} kg</strong></p>
+        <p class="shortage">Chybí celkem: <strong>${deficitKg.toFixed(2)} kg</strong></p>
     `;
+
+    modal.querySelector('#shorten-order-original-amount').textContent = `${item.boxCount} beden`;
+    const newAmountInput = modal.querySelector('#shorten-order-new-amount');
+    newAmountInput.value = suggestedBoxCount;
+    newAmountInput.max = item.boxCount;
+
+    const applyBtn = modal.querySelector('#apply-suggested-boxes-btn');
+    applyBtn.textContent = `Použít navrhované (${suggestedBoxCount})`;
+    applyBtn.onclick = () => {
+        newAmountInput.value = suggestedBoxCount;
+    };
 
     modal.classList.add('active');
 }
+
 
 export function saveShortenedOrder() {
     const modal = DOMElements.shortenOrderModal;
@@ -1542,7 +1775,6 @@ export function saveDirectPreProduction() {
     let item = order.items.find(i => i.surovinaId === surovinaId && i.type === type);
     if (item) {
         item.boxCount += boxCount;
-        item.doneCount = item.boxCount;
     } else {
         order.items.push({ 
             id: generateId(), 
@@ -1550,12 +1782,12 @@ export function saveDirectPreProduction() {
             boxCount: boxCount, 
             isActive: true, 
             type: type, 
-            doneCount: boxCount 
+            doneCount: 0 
         });
     }
 
     saveState();
-    showToast(`${boxCount} beden vyrobeno a přidáno do objednávek.`, 'success');
+    showToast(`${boxCount} beden přidáno jako požadavek do objednávek.`, 'success');
     modal.classList.remove('active');
     render();
 }
