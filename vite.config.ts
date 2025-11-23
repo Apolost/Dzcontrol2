@@ -21,3 +21,12 @@ export default defineConfig(({ mode }) => {
       }
     };
 });
+
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+// ZDE uprav base – musí odpovídat názvu repozitáře
+export default defineConfig({
+  plugins: [react()],
+  base: '/Dzcontrol2/', // <- tohle je důležité!
+})
